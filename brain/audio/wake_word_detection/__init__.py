@@ -1,0 +1,2 @@
+# Wake word detection package
+
