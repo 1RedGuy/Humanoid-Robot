@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import json
 import os
 import time
 from pathlib import Path
@@ -8,7 +9,7 @@ import cv2
 from openai import OpenAI
 
 from brain.config import SurroundingsContextGetterPrompt
-
+from brain.state import robot_state
 
 class SurroundingsContextGetter:
     def __init__(self):
@@ -88,6 +89,37 @@ class SurroundingsContextGetter:
             ],
         )
 
+        content = response.choices[0].message.content
+        if not content:
+            print("Error: Empty response from OpenAI API")
+            return None
+        
+        # Try to extract JSON from markdown code blocks if present
+        content = content.strip()
+        if content.startswith("```"):
+            # Remove markdown code block markers
+            lines = content.split("\n")
+            if lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+            content = "\n".join(lines)
+        
+        try:
+            result = json.loads(content)
+        except json.JSONDecodeError as e:
+            print(f"Error: Failed to parse JSON response: {e}")
+            print(f"Response content: {content[:500]}")  # Print first 500 chars for debugging
+            return None
+        
+        if "structured" not in result or "description" not in result:
+            print("Error: Response missing required fields 'structured' or 'description'")
+            print(f"Response keys: {list(result.keys())}")
+            return None
+        
+        robot_state.state["environment"].update(result["structured"])
+        robot_state.state["environment"]["description"] = result["description"]
+
         save_dir = (
             Path(__file__).parent.parent.parent.parent
             / "brain"
@@ -100,7 +132,8 @@ class SurroundingsContextGetter:
         timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")
         output_path = save_dir / f"{timestamp}.txt"
         with open(output_path, "w") as f:
-            f.write(response.choices[0].message.content)
+            # Save the cleaned JSON content
+            f.write(json.dumps(result, indent=2))
 
         return str(output_path)
 

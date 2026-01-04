@@ -25,6 +25,7 @@ build/
 *.egg
 
 unnecessary/
+brain/data/
 
 # Testing
 .pytest_cache/
