@@ -2,8 +2,8 @@ import asyncio
 from dotenv import load_dotenv
 from .audio.wake_word_detection.main import WakeWordDetection
 from .vision.surroundings_context_getter.main import SurroundingsContextGetter
-from .initial_boot.initial_boot import InitialBoot
 from .conversation_manager.main import ConversationManager
+from .initial_boot.initial_boot import InitialBoot
 
 load_dotenv()
 
@@ -11,9 +11,8 @@ load_dotenv()
 class Brain:
     def __init__(self):
         self.wake_word_detection = WakeWordDetection()
-        self.surroundings_context = SurroundingsContextGetter()
-        self.initial_boot = InitialBoot(self.surroundings_context)
         self.conversation_manager = ConversationManager()
+        self.initial_boot = InitialBoot()
 
     async def run(self):
         """Main entry point for the Brain."""

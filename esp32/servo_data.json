@@ -1,0 +1,150 @@
+{
+  "servos": {
+    "0": {
+      "role": null,
+      "min_angle": 0,
+      "max_angle": 0,
+      "default_angle": 0,
+      "current_angle": 0,
+      "inverted": false
+    },
+    "1": {
+      "role": null,
+      "min_angle": 0,
+      "max_angle": 0,
+      "default_angle": 0,
+      "current_angle": 0,
+      "inverted": false
+    },
+    "2": {
+      "role": null,
+      "min_angle": 0,
+      "max_angle": 0,
+      "default_angle": 0,
+      "current_angle": 0,
+      "inverted": false
+    },
+    "3": {
+      "role": null,
+      "min_angle": 0,
+      "max_angle": 0,
+      "default_angle": 0,
+      "current_angle": 0,
+      "inverted": false
+    },
+    "4": {
+      "role": null,
+      "min_angle": 0,
+      "max_angle": 0,
+      "default_angle": 0,
+      "current_angle": 0,
+      "inverted": false
+    },
+    "5": {
+      "role": null,
+      "min_angle": 0,
+      "max_angle": 0,
+      "default_angle": 0,
+      "current_angle": 0,
+      "inverted": false
+    },
+    "6": {
+      "role": null,
+      "min_angle": 0,
+      "max_angle": 0,
+      "default_angle": 0,
+      "current_angle": 0,
+      "inverted": false
+    },
+    "7": {
+      "role": null,
+      "min_angle": 0,
+      "max_angle": 0,
+      "default_angle": 0,
+      "current_angle": 0,
+      "inverted": false
+    },
+    "8": {
+      "role": null,
+      "min_angle": 0,
+      "max_angle": 0,
+      "default_angle": 0,
+      "current_angle": 0,
+      "inverted": false
+    },
+    "9": {
+      "role": null,
+      "min_angle": 0,
+      "max_angle": 0,
+      "default_angle": 0,
+      "current_angle": 0,
+      "inverted": false
+    },
+    "10": {
+      "role": null,
+      "min_angle": 0,
+      "max_angle": 0,
+      "default_angle": 0,
+      "current_angle": 0,
+      "inverted": false
+    },
+    "11": {
+      "role": null,
+      "min_angle": 0,
+      "max_angle": 0,
+      "default_angle": 0,
+      "current_angle": 0,
+      "inverted": false
+    },
+    "12": {
+      "role": null,
+      "min_angle": 0,
+      "max_angle": 0,
+      "default_angle": 0,
+      "current_angle": 0,
+      "inverted": false
+    },
+    "13": {
+      "role": null,
+      "min_angle": 0,
+      "max_angle": 0,
+      "default_angle": 0,
+      "current_angle": 0,
+      "inverted": false
+    },
+    "14": {
+      "role": null,
+      "min_angle": 0,
+      "max_angle": 0,
+      "default_angle": 0,
+      "current_angle": 0,
+      "inverted": false
+    },
+    "15": {
+      "role": null,
+      "min_angle": 0,
+      "max_angle": 0,
+      "default_angle": 0,
+      "current_angle": 0,
+      "inverted": false
+    },
+    "16": {
+      "role": null,
+      "min_angle": 0,
+      "max_angle": 0,
+      "default_angle": 0,
+      "current_angle": 0,
+      "inverted": false
+    },
+    "17": {
+      "role": null,
+      "min_angle": 0,
+      "max_angle": 0,
+      "default_angle": 0,
+      "current_angle": 0,
+      "inverted": false
+    }
+  },
+
+  "expressions": {}
+}
