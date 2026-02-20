@@ -81,8 +81,10 @@ class ServoDriver:
             servo_id = self._servo_id_from_key(key, config)
             if servo_id is None:
                 continue
-            self.current_positions[servo_id] = angle
-            self.pca.servo_set_angle(servo_id, angle)
+            clamped = self._clamp_angle(servo_id, angle)
+            self.current_positions[servo_id] = clamped
+            physical = self._apply_inversion(servo_id, clamped)
+            self.pca.servo_set_angle(servo_id, physical)
         print("Calibration complete")
     
     def _get_servo_config(self, servo_id):
@@ -119,11 +121,10 @@ class ServoDriver:
         return max(lo, min(hi, angle))
     
     def _apply_inversion(self, servo_id, angle):
-        """Apply inversion if servo is configured as inverted."""
+        """Invert within the servo's own [min, max] range so physical angles stay in bounds."""
         config = self._get_servo_config(servo_id)
         if config["inverted"]:
-            # Invert: 0° becomes 180°, 180° becomes 0°
-            return 180 - angle
+            return config["min_angle"] + config["max_angle"] - angle
         return angle
     
     def move_servo(self, servo_id, target_angle, duration=0.5):

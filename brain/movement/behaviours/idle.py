@@ -1,26 +1,68 @@
-import asyncio, random
+"""
+Idle behaviour — periodic blinking.
 
-class IdleBehaviour: 
-    def __init__(self, servo_controller):
-        self.servo_controller = servo_controller
-        self.eye_servos = [1, 2] # CHANGE TO THE ACTUAL SERVO IDS
+Uses the ServoMixer blink layer (priority 10) to temporarily override
+eyelid servos.  When the layer is released after each blink, the eyelids
+fall back to whatever the expression layer currently dictates.
+
+Runs continuously regardless of activity state.
+"""
+
+import asyncio
+import random
+from typing import Dict
+
+from brain.movement.servo_mixer import ServoMixer
+
+BLINK_LAYER = "blink"
+BLINK_PRIORITY = 10
+
+EYELID_SERVOS = [
+    "EyeLidLeftUp",
+    "EyeLidLeftDown",
+    "EyeLidRightUp",
+    "EyeLidRightDown",
+]
+
+# Angles that represent "eyes closed" for each eyelid servo.
+# These need to be tuned per-robot via manual_debug; these are starting
+# defaults derived from min/max in servo_data.json.
+EYELID_CLOSED: Dict[str, float] = {
+    "EyeLidLeftUp": 90,
+    "EyeLidLeftDown": 150,
+    "EyeLidRightUp": 10,
+    "EyeLidRightDown": 120,
+}
 
 
-        async def blink(self):
+class IdleBehaviour:
+    def __init__(self, mixer: ServoMixer):
+        self._mixer = mixer
 
-            blink_duration = random.triangular(0.1, 0.4, 0.18)
+    async def blink(self):
+        close_duration = random.triangular(0.04, 0.08, 0.05)
+        hold_duration = random.triangular(0.06, 0.15, 0.08)
+        open_duration = random.triangular(0.04, 0.10, 0.06)
 
-            for servo_id in self.eye_servos:
-                open_duration = random.triangular(0.15, 0.30, 0.20)
-                await self.servo_controller.move_servo(servo_id, 0, open_duration) # Move the servo to 0 degrees for 0.1 seconds
+        self._mixer.set_layer(
+            BLINK_LAYER,
+            BLINK_PRIORITY,
+            EYELID_CLOSED,
+            duration=close_duration,
+        )
 
-            await asyncio.sleep(blink_duration)
+        await asyncio.sleep(close_duration + hold_duration)
 
-            for servo_id in self.eye_servos:
-                close_duration = random.triangular(0.07, 0.10, 0.08)
-                await self.servo_controller.move_servo(servo_id, 0, close_duration) # Move the servo to 0 degrees for 0.1 seconds
+        self._mixer.release_layer(BLINK_LAYER, duration=open_duration)
 
-            await asyncio.sleep(random.uniform(1, 3))
+        await asyncio.sleep(open_duration)
 
     async def run(self):
-        pass
+        """Blink loop — runs forever."""
+        while True:
+            interval = random.uniform(2.0, 6.0)
+            await asyncio.sleep(interval)
+            try:
+                await self.blink()
+            except Exception as e:
+                print(f"[IdleBehaviour] blink error: {e}")

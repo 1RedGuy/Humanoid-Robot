@@ -65,9 +65,16 @@ def create_app(
     async def connect():
         try:
             port = serial.connect()
+            _init_positions()
             return {"connected": True, "port": port}
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
+
+    @app.post("/api/disconnect")
+    async def disconnect():
+        serial.disconnect()
+        _init_positions()
+        return {"ok": True}
 
     @app.get("/api/servos")
     async def get_servos():

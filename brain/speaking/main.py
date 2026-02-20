@@ -34,32 +34,37 @@ class Speaking:
         self.voice_id = voice_id
         self.speaking_model = speaking_model
 
-    def speak(self, conversation_data: dict, save_path: Path | None = None) -> tuple[str, bytes]:
+    def speak(
+        self,
+        conversation_data: dict,
+        save_path: Path | None = None,
+        on_audio_ready: callable | None = None,
+    ) -> tuple[str, bytes]:
         """
-        Generate response from conversation, convert to audio, and play it.
-        This is the main "answer" method that handles the full flow.
-        
+        Generate response, convert to audio, and play it.
+
         Args:
-            conversation_data: Dictionary containing conversation history and environment
-            save_path: Optional path to save the audio file (if None, audio is not saved)
-            
+            conversation_data: Conversation history and environment.
+            save_path: Optional path to save the audio file.
+            on_audio_ready: Optional callback invoked right before playback
+                            starts (e.g. to switch the face to "speaking").
+
         Returns:
-            tuple: (response_text, audio_bytes) - the generated response and audio data
+            (response_text, audio_bytes)
         """
-        # Step 1: Generate text response from conversation
         response_text = self.generate_response(conversation_data)
-        
-        # Step 2: Convert text to audio
+
         audio_bytes = self.generate_audio(response_text)
-        
-        # Step 3: Save audio if path provided
+
         if save_path:
             with open(save_path, 'wb') as f:
                 f.write(audio_bytes)
-        
-        # Step 4: Play audio
+
+        if on_audio_ready:
+            on_audio_ready()
+
         self.play_audio(audio_bytes)
-        
+
         return response_text, audio_bytes
 
     def generate_response(self, conversation_data: dict):

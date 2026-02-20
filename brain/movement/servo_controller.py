@@ -2,7 +2,8 @@ import json
 import serial
 import serial.tools.list_ports
 from typing import List, Dict, Optional
-# TODO CHANGE THE LOGIC
+
+
 class ServoController:
     def __init__(self, port: Optional[str] = None, baudrate: int = 115200):
         """
@@ -43,40 +44,25 @@ class ServoController:
         """Send calibration command to ESP32."""
         self._send_command({"command": "calibrate_servos"})
 
-    async def move_servo(self, servo_id: int, angle: int, duration: float):
-        """
-        Send command to move a single servo.
-        
-        Args:
-            servo_id: PCA9685 channel (0-15)
-            angle: Target angle in degrees (0-180)
-            duration: Movement duration in seconds
-        """
+    def move_servo(self, servo_id: int, angle: float, duration: float = 0.5):
         self._send_command({
             "command": "move_servo",
             "servo_id": servo_id,
             "angle": angle,
-            "duration": duration
+            "duration": duration,
         })
 
-    async def move_multiple_servos(self, servo_commands: List[Dict]):
-        """
-        Send command to move multiple servos simultaneously.
-        
-        Args:
-            servo_commands: List of dicts with 'servo_id', 'angle', and optional 'duration'
-        """
+    def move_multiple_servos(self, servo_commands: List[Dict]):
         servos = []
         for cmd in servo_commands:
             servos.append({
                 "servo_id": cmd["servo_id"],
                 "angle": cmd["angle"],
-                "duration": cmd.get("duration", 0.5)
+                "duration": cmd.get("duration", 0.5),
             })
-        
         self._send_command({
             "command": "move_multiple_servos",
-            "servos": servos
+            "servos": servos,
         })
 
     def stop_all(self):

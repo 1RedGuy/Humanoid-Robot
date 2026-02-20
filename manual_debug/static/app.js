@@ -38,12 +38,15 @@ const btnCalibrate  = document.getElementById("btn-calibrate");
 const btnStop       = document.getElementById("btn-stop");
 const btnReload     = document.getElementById("btn-reload");
 
+const btnDisconnect = document.getElementById("btn-disconnect");
+
 function setConnected(state, port) {
   connected = state;
   connIndicator.className = "indicator " + (state ? "connected" : "disconnected");
   connLabel.textContent   = state ? `Connected (${port})` : "Disconnected";
-  btnConnect.textContent  = state ? "Connected" : "Connect";
+  btnConnect.textContent  = "Connect";
   btnConnect.disabled     = state;
+  btnDisconnect.disabled  = !state;
   btnCalibrate.disabled   = !state;
   btnStop.disabled        = !state;
 }
@@ -54,9 +57,23 @@ btnConnect.addEventListener("click", async () => {
   try {
     const data = await api("POST", "/api/connect");
     setConnected(true, data.port);
+    const fresh = await api("GET", "/api/servos");
+    renderServos(fresh);
   } catch (e) {
     alert("Connection failed: " + e.message);
     setConnected(false, null);
+  }
+});
+
+btnDisconnect.addEventListener("click", async () => {
+  btnDisconnect.disabled = true;
+  try {
+    await api("POST", "/api/disconnect");
+    setConnected(false, null);
+    const fresh = await api("GET", "/api/servos");
+    renderServos(fresh);
+  } catch (e) {
+    alert("Disconnect failed: " + e.message);
   }
 });
 

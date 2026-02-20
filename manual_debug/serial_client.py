@@ -23,13 +23,21 @@ class SerialClient:
         return None
 
     def connect(self) -> str:
-        """Open the serial connection. Returns the port name used."""
+        """Open the serial connection. Closes any existing connection first. Returns the port name used."""
+        if self.conn and self.conn.is_open:
+            self.conn.close()
         resolved = self.port or self._find_esp32_port()
         if not resolved:
             raise ConnectionError("Could not find ESP32 serial port. Specify --port manually.")
         self.conn = serial.Serial(resolved, self.baudrate, timeout=1)
         self.port = resolved
         return resolved
+
+    def disconnect(self):
+        """Close the serial connection."""
+        if self.conn and self.conn.is_open:
+            self.conn.close()
+        self.conn = None
 
     def _send(self, data: dict):
         if self.conn is None or not self.conn.is_open:

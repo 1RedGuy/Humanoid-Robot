@@ -50,4 +50,5 @@ thinking_model = "gpt-5-nano"
 speaking_model = "eleven_flash_v2_5"
 voice_id = "406EiNlYvqFqcz3vsnOm"
 
-PROJECT_ROOT = Path(__file__).parent.parent  
+PROJECT_ROOT = Path(__file__).parent.parent
+SERVO_DATA_PATH = PROJECT_ROOT / "esp32" / "servo_data.json"  
