@@ -1,150 +1,209 @@
 {
+  "_comments": {
+    "comment1": "We command raw angles per motor; inverted is unused (all false).Init and default angle: from global (calibrate_on_init, calibrate_angle). Per-servo default_angle is not used. current_angle: -1 = not initialized"
+  },
+  "global": {
+    "calibrate_on_init": true,
+    "calibrate_angle": 90
+  },
   "servos": {
-    "0": {
-      "role": null,
-      "min_angle": 0,
-      "max_angle": 0,
-      "default_angle": 0,
-      "current_angle": 0,
+    "EyeLidLeftDown": {
+      "pin": 15,
+      "colors": [
+        "red",
+        "green",
+        "green"
+      ],
+      "min_angle": 90,
+      "max_angle": 150,
+      "default_angle": null,
+      "current_angle": -1,
       "inverted": false
     },
-    "1": {
-      "role": null,
-      "min_angle": 0,
-      "max_angle": 0,
-      "default_angle": 0,
-      "current_angle": 0,
+    "EyeLidLeftUp": {
+      "pin": 14,
+      "wire_colors": [
+        "green",
+        "red",
+        "green"
+      ],
+      "min_angle": 90,
+      "max_angle": 20,
+      "default_angle": null,
+      "current_angle": -1,
       "inverted": false
     },
-    "2": {
-      "role": null,
-      "min_angle": 0,
-      "max_angle": 0,
-      "default_angle": 0,
-      "current_angle": 0,
+    "EyeLidRightDown": {
+      "pin": 12,
+      "wire_colors": [
+        "red",
+        "green",
+        "white"
+      ],
+      "min_angle": 60,
+      "max_angle": 120,
+      "default_angle": null,
+      "current_angle": -1,
       "inverted": false
     },
-    "3": {
-      "role": null,
-      "min_angle": 0,
-      "max_angle": 0,
-      "default_angle": 0,
-      "current_angle": 0,
+    "EyeLidRightUp": {
+      "pin": 11,
+      "wire_colors": [
+        "green",
+        "green",
+        "green"
+      ],
+      "min_angle": 10,
+      "max_angle": 75,
+      "default_angle": null,
+      "current_angle": -1,
       "inverted": false
     },
-    "4": {
-      "role": null,
-      "min_angle": 0,
-      "max_angle": 0,
-      "default_angle": 0,
-      "current_angle": 0,
+    "EyeYAxis": {
+      "pin": 13,
+      "wire_colors": [
+        "green",
+        "white",
+        "white"
+      ],
+      "min_angle": 40,
+      "max_angle": 100,
+      "default_angle": null,
+      "current_angle": -1,
       "inverted": false
     },
-    "5": {
-      "role": null,
-      "min_angle": 0,
-      "max_angle": 0,
-      "default_angle": 0,
-      "current_angle": 0,
+    "EyeXAxis": {
+      "pin": 10,
+      "wire_colors": [
+        "white",
+        "red",
+        "white"
+      ],
+      "min_angle": 40,
+      "max_angle": 120,
+      "default_angle": null,
+      "current_angle": -1,
       "inverted": false
     },
-    "6": {
-      "role": null,
-      "min_angle": 0,
-      "max_angle": 0,
-      "default_angle": 0,
-      "current_angle": 0,
+    "EyebrowInnerRight": {
+      "pin": 6,
+      "wire_colors": [
+        "red",
+        "red",
+        "red"
+      ],
+      "min_angle": 30,
+      "max_angle": 90,
+      "default_angle": null,
+      "current_angle": -1,
       "inverted": false
     },
-    "7": {
-      "role": null,
-      "min_angle": 0,
-      "max_angle": 0,
-      "default_angle": 0,
-      "current_angle": 0,
+    "EyebrowInnerLeft": {
+      "pin": 9,
+      "wire_colors": [
+        "white",
+        "white",
+        "red"
+      ],
+      "min_angle": 65,
+      "max_angle": 130,
+      "default_angle": null,
+      "current_angle": -1,
       "inverted": false
     },
-    "8": {
-      "role": null,
-      "min_angle": 0,
-      "max_angle": 0,
-      "default_angle": 0,
-      "current_angle": 0,
+    "EyebrowOuterRight": {
+      "pin": 7,
+      "wire_colors": [
+        "white",
+        "white",
+        "white"
+      ],
+      "min_angle": 45,
+      "max_angle": 140,
+      "default_angle": null,
+      "current_angle": -1,
       "inverted": false
     },
-    "9": {
-      "role": null,
-      "min_angle": 0,
-      "max_angle": 0,
-      "default_angle": 0,
-      "current_angle": 0,
+    "EyebrowOuterLeft": {
+      "pin": 8,
+      "wire_colors": [
+        "green",
+        "white",
+        "green"
+      ],
+      "min_angle": 20,
+      "max_angle": 110,
+      "default_angle": null,
+      "current_angle": -1,
       "inverted": false
     },
-    "10": {
-      "role": null,
+    "RightCheekUp": {
+      "pin": 2,
+      "wire_colors": [
+        "red",
+        "white",
+        "red"
+      ],
       "min_angle": 0,
       "max_angle": 0,
-      "default_angle": 0,
-      "current_angle": 0,
+      "default_angle": null,
+      "current_angle": -1,
       "inverted": false
     },
-    "11": {
-      "role": null,
+    "RightCheekDown": {
+      "pin": 1,
+      "wire_colors": [
+        "red",
+        "green",
+        "red"
+      ],
       "min_angle": 0,
       "max_angle": 0,
-      "default_angle": 0,
-      "current_angle": 0,
+      "default_angle": null,
+      "current_angle": -1,
       "inverted": false
     },
-    "12": {
-      "role": null,
+    "LeftCheekUp": {
+      "pin": 5,
+      "wire_colors": [
+        "green",
+        "white",
+        "white"
+      ],
       "min_angle": 0,
       "max_angle": 0,
-      "default_angle": 0,
-      "current_angle": 0,
+      "default_angle": null,
+      "current_angle": -1,
       "inverted": false
     },
-    "13": {
-      "role": null,
+    "LeftCheekDown": {
+      "pin": 4,
+      "wire_colors": [
+        "white",
+        "red",
+        "red"
+      ],
       "min_angle": 0,
       "max_angle": 0,
-      "default_angle": 0,
-      "current_angle": 0,
+      "default_angle": null,
+      "current_angle": -1,
       "inverted": false
     },
-    "14": {
-      "role": null,
+    "UpperLip": {
+      "pin": 3,
+      "wire_colors": [
+        "white",
+        "red",
+        "green"
+      ],
       "min_angle": 0,
       "max_angle": 0,
-      "default_angle": 0,
-      "current_angle": 0,
-      "inverted": false
-    },
-    "15": {
-      "role": null,
-      "min_angle": 0,
-      "max_angle": 0,
-      "default_angle": 0,
-      "current_angle": 0,
-      "inverted": false
-    },
-    "16": {
-      "role": null,
-      "min_angle": 0,
-      "max_angle": 0,
-      "default_angle": 0,
-      "current_angle": 0,
-      "inverted": false
-    },
-    "17": {
-      "role": null,
-      "min_angle": 0,
-      "max_angle": 0,
-      "default_angle": 0,
-      "current_angle": 0,
+      "default_angle": null,
+      "current_angle": -1,
       "inverted": false
     }
   },
-
-  "expressions": {}
+  "expressions": {
+    "neutral": {}
+  }
 }

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Manual Debug — Humanoid Robot</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <!-- Top bar -->
+  <header id="topbar">
+    <h1>Manual Debug</h1>
+    <div id="connection">
+      <span id="conn-indicator" class="indicator disconnected"></span>
+      <span id="conn-label">Disconnected</span>
+      <button id="btn-connect">Connect</button>
+    </div>
+  </header>
+
+  <!-- Controls bar -->
+  <section id="controls">
+    <button id="btn-calibrate" class="ctrl-btn" disabled>Calibrate All</button>
+    <button id="btn-stop" class="ctrl-btn danger" disabled>Emergency Stop</button>
+    <button id="btn-reload" class="ctrl-btn">Reload Config</button>
+  </section>
+
+  <main>
+    <!-- Servo sliders -->
+    <section id="servos">
+      <h2>Servos</h2>
+      <div id="server-error" class="server-error" style="display: none;"></div>
+      <div id="servo-groups">
+        <p id="load-message" class="load-message">Loading…</p>
+      </div>
+    </section>
+
+    <!-- Expressions -->
+    <section id="expressions">
+      <h2>Expressions</h2>
+      <div id="expr-list"></div>
+      <div id="expr-save">
+        <input type="text" id="expr-name" placeholder="Expression name…">
+        <button id="btn-save-expr">Save Current</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

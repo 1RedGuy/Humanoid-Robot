@@ -23,35 +23,73 @@ class ServoDriver:
         self.pca = PCA9685Driver(i2c_channel=0, scl_pin=22, sda_pin=21, i2c_freq=400000)
         self.pca.set_pwm_frequency(50)  # 50Hz for servos
         
-        # Load servo configuration
-        self.servo_config = self._load_servo_config(config_file)
+        # Load full config (global + servos)
+        self.servo_config, self.global_config = self._load_servo_config(config_file)
         
         # Store current positions
         self.current_positions = {}
         
+        # Init: move all servos to global calibrate angle if enabled
+        if self.global_config.get("calibrate_on_init", False):
+            self._calibrate_on_init()
+        
     def _load_servo_config(self, filename):
         """
         Load servo configuration from JSON file.
-        Only extracts the "servos" key from the JSON - ignores other data like "expression_data".
+        Returns (servos dict, global dict). Init and default angle come from global, not per-servo default_angle.
+        Also builds a pin -> config lookup so channel-based commands use correct limits.
         """
         try:
             with open(filename, 'r') as f:
                 config = json.load(f)
-            # Extract only the "servos" section - other keys in JSON are ignored
             servo_config = config.get("servos", {})
-            print(f"Loaded servo config from {filename} ({len(servo_config)} servos configured)")
-            return servo_config
+            global_config = config.get("global", {})
+
+            self.pin_to_config = {}
+            for name, cfg in servo_config.items():
+                pin = cfg.get("pin")
+                if pin is not None:
+                    self.pin_to_config[int(pin)] = cfg
+
+            print(f"Loaded servo config from {filename} ({len(servo_config)} servos, global: {global_config})")
+            return servo_config, global_config
         except Exception as e:
             print(f"Warning: Could not load {filename}: {e}")
             print("Using default limits (0-180)")
-            return {}
+            self.pin_to_config = {}
+            return {}, {}
+    
+    def _get_global_angle(self):
+        """Angle used for init and when current position is unknown (from global, not per-servo default_angle)."""
+        return self.global_config.get("calibrate_angle", 90)
+    
+    def _servo_id_from_key(self, key, config):
+        """Resolve PCA channel from config key (name or number) and servo config (pin/role)."""
+        chan = config.get("pin") or config.get("role")
+        if chan is not None:
+            return int(chan)
+        try:
+            return int(key)
+        except (ValueError, TypeError):
+            return None
+
+    def _calibrate_on_init(self):
+        """Move all configured servos to global calibrate_angle once at startup."""
+        angle = self._get_global_angle()
+        print(f"Calibrating all servos to global angle {angle}°...")
+        for key, config in self.servo_config.items():
+            servo_id = self._servo_id_from_key(key, config)
+            if servo_id is None:
+                continue
+            self.current_positions[servo_id] = angle
+            self.pca.servo_set_angle(servo_id, angle)
+        print("Calibration complete")
     
     def _get_servo_config(self, servo_id):
-        """Get all configuration data for a servo. Returns dict with defaults."""
-        servo_id_str = str(servo_id)
-        if servo_id_str in self.servo_config:
-            config = self.servo_config[servo_id_str]
-            # If min/max are 0, use defaults (means not configured yet)
+        """Get all configuration data for a servo by PCA channel (pin number)."""
+        default_angle = self._get_global_angle()
+        if servo_id in self.pin_to_config:
+            config = self.pin_to_config[servo_id]
             min_angle = config.get("min_angle", 0)
             max_angle = config.get("max_angle", 0)
             if min_angle == 0 and max_angle == 0:
@@ -62,22 +100,23 @@ class ServoDriver:
                 "role": config.get("role"),
                 "min_angle": min_angle,
                 "max_angle": max_angle,
-                "default_angle": config.get("default_angle", 90) if config.get("default_angle", 0) != 0 else 90,
+                "default_angle": default_angle,
                 "inverted": config.get("inverted", False)
             }
-        # Defaults if not configured
         return {
             "role": None,
             "min_angle": 0,
             "max_angle": 180,
-            "default_angle": 90,
+            "default_angle": default_angle,
             "inverted": False
         }
     
     def _clamp_angle(self, servo_id, angle):
-        """Clamp angle to servo-specific safe limits."""
+        """Clamp angle to servo-specific safe limits. Handles reversed min/max (e.g. 90->20)."""
         config = self._get_servo_config(servo_id)
-        return max(config["min_angle"], min(config["max_angle"], angle))
+        lo = min(config["min_angle"], config["max_angle"])
+        hi = max(config["min_angle"], config["max_angle"])
+        return max(lo, min(hi, angle))
     
     def _apply_inversion(self, servo_id, angle):
         """Apply inversion if servo is configured as inverted."""
@@ -102,9 +141,9 @@ class ServoDriver:
         # Clamp to safe limits
         target_angle = self._clamp_angle(servo_id, target_angle)
         
-        # Initialize position if needed
+        # Initialize position if needed (use global angle, not per-servo default_angle)
         if servo_id not in self.current_positions:
-            self.current_positions[servo_id] = config["default_angle"]
+            self.current_positions[servo_id] = self._get_global_angle()
         
         start_angle = self.current_positions[servo_id]
         steps = max(10, int(duration * 50))  # 50 steps per second
@@ -124,13 +163,14 @@ class ServoDriver:
         self.current_positions[servo_id] = target_angle
     
     def calibrate_servos(self):
-        """Calibration routine - move all servos to their default positions."""
-        print("Calibrating servos...")
-        for servo_id_str in self.servo_config.keys():
-            servo_id = int(servo_id_str)
-            config = self._get_servo_config(servo_id)
-            default_angle = config["default_angle"]
-            self.move_servo(servo_id, default_angle, duration=1.0)
+        """Calibration routine - move all servos to global calibrate_angle (not per-servo default_angle)."""
+        angle = self._get_global_angle()
+        print(f"Calibrating servos to global angle {angle}°...")
+        for key, config in self.servo_config.items():
+            servo_id = self._servo_id_from_key(key, config)
+            if servo_id is None:
+                continue
+            self.move_servo(servo_id, angle, duration=1.0)
         print("Calibration complete")
     
     def stop_all(self):
