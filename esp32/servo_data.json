@@ -1,212 +1,188 @@
 {
   "_comments": {
-    "comment1": "Inverted flag mirrors angle within [min,max] range for paired L/R servos. Init and default angle: from global (calibrate_on_init, calibrate_angle). Per-servo default_angle is not used. current_angle: -1 = not initialized"
+    "comment1": "Inverted flag mirrors angle within [min,max] range for paired L/R servos. Init angle comes from global calibrate_angle (calibrate_on_init)."
   },
   "global": {
     "calibrate_on_init": true,
     "calibrate_angle": 90
   },
+  "idle": {
+    "_comment": "Brain idle behaviour: blink and random gaze. eyes_closed angles come from expressions.eyes_closed.",
+    "interval_min": 2.0,
+    "interval_max": 6.0,
+    "blink_chance": 0.4,
+    "blink_close_min": 0.04,
+    "blink_close_max": 0.08,
+    "blink_hold_min": 0.06,
+    "blink_hold_max": 0.15,
+    "blink_open_min": 0.04,
+    "blink_open_max": 0.10,
+    "gaze_extent_fraction": 0.75,
+    "gaze_extent_x": 32,
+    "gaze_extent_y": 12,
+    "gaze_hold_min": 1.5,
+    "gaze_hold_max": 3.5,
+    "gaze_move_duration": 0.25,
+    "gaze_return_duration": 0.3
+  },
   "servos": {
     "EyeLidLeftDown": {
       "pin": 15,
-      "colors": [
-        "red",
-        "green",
-        "green"
-      ],
-      "min_angle": 90,
-      "max_angle": 150,
-      "default_angle": null,
-      "current_angle": -1,
+      "wire_colors": ["red", "green", "green"],
+      "min_angle": 55,
+      "max_angle": 90,
       "inverted": false
     },
     "EyeLidLeftUp": {
       "pin": 14,
-      "wire_colors": [
-        "green",
-        "red",
-        "green"
-      ],
-      "min_angle": 90,
-      "max_angle": 20,
-      "default_angle": null,
-      "current_angle": -1,
+      "wire_colors": ["green", "red", "green"],
+      "min_angle": 120,
+      "max_angle": 165,
       "inverted": false
     },
     "EyeLidRightDown": {
       "pin": 12,
-      "wire_colors": [
-        "red",
-        "green",
-        "white"
-      ],
-      "min_angle": 60,
-      "max_angle": 120,
-      "default_angle": null,
-      "current_angle": -1,
+      "wire_colors": ["red", "green", "white"],
+      "min_angle": 130,
+      "max_angle": 170,
       "inverted": false
     },
     "EyeLidRightUp": {
       "pin": 11,
-      "wire_colors": [
-        "green",
-        "green",
-        "green"
-      ],
-      "min_angle": 10,
-      "max_angle": 75,
-      "default_angle": null,
-      "current_angle": -1,
+      "wire_colors": ["green", "green", "green"],
+      "min_angle": 100,
+      "max_angle": 150,
       "inverted": false
     },
     "EyeYAxis": {
       "pin": 13,
-      "wire_colors": [
-        "green",
-        "white",
-        "white"
-      ],
-      "min_angle": 40,
-      "max_angle": 100,
-      "default_angle": null,
-      "current_angle": -1,
+      "wire_colors": ["green", "white", "white"],
+      "min_angle": 75,
+      "max_angle": 130,
       "inverted": false
     },
     "EyeXAxis": {
       "pin": 10,
-      "wire_colors": [
-        "white",
-        "red",
-        "white"
-      ],
-      "min_angle": 40,
-      "max_angle": 120,
-      "default_angle": null,
-      "current_angle": -1,
+      "wire_colors": ["white", "red", "white"],
+      "min_angle": 80,
+      "max_angle": 250,
       "inverted": false
     },
     "EyebrowInnerRight": {
       "pin": 6,
-      "wire_colors": [
-        "red",
-        "red",
-        "red"
-      ],
+      "wire_colors": ["red", "red", "red"],
       "min_angle": 30,
       "max_angle": 90,
-      "default_angle": null,
-      "current_angle": -1,
       "inverted": false
     },
     "EyebrowInnerLeft": {
       "pin": 9,
-      "wire_colors": [
-        "white",
-        "white",
-        "red"
-      ],
+      "wire_colors": ["white", "white", "red"],
       "min_angle": 65,
       "max_angle": 130,
-      "default_angle": null,
-      "current_angle": -1,
       "inverted": false
     },
     "EyebrowOuterRight": {
       "pin": 7,
-      "wire_colors": [
-        "white",
-        "white",
-        "white"
-      ],
+      "wire_colors": ["white", "white", "white"],
       "min_angle": 45,
       "max_angle": 140,
-      "default_angle": null,
-      "current_angle": -1,
       "inverted": false
     },
     "EyebrowOuterLeft": {
       "pin": 8,
-      "wire_colors": [
-        "green",
-        "white",
-        "green"
-      ],
+      "wire_colors": ["green", "white", "green"],
       "min_angle": 20,
       "max_angle": 110,
-      "default_angle": null,
-      "current_angle": -1,
       "inverted": false
     },
     "RightCheekUp": {
       "pin": 2,
-      "wire_colors": [
-        "red",
-        "white",
-        "red"
-      ],
+      "wire_colors": ["red", "white", "red"],
       "min_angle": 0,
       "max_angle": 0,
-      "default_angle": null,
-      "current_angle": -1,
       "inverted": false
     },
     "RightCheekDown": {
       "pin": 1,
-      "wire_colors": [
-        "red",
-        "green",
-        "red"
-      ],
+      "wire_colors": ["red", "green", "red"],
       "min_angle": 0,
       "max_angle": 0,
-      "default_angle": null,
-      "current_angle": -1,
       "inverted": false
     },
     "LeftCheekUp": {
       "pin": 5,
-      "wire_colors": [
-        "green",
-        "white",
-        "white"
-      ],
+      "wire_colors": ["green", "white", "white"],
       "min_angle": 0,
       "max_angle": 0,
-      "default_angle": null,
-      "current_angle": -1,
       "inverted": false
     },
     "LeftCheekDown": {
       "pin": 4,
-      "wire_colors": [
-        "white",
-        "red",
-        "red"
-      ],
+      "wire_colors": ["white", "red", "red"],
       "min_angle": 0,
       "max_angle": 0,
-      "default_angle": null,
-      "current_angle": -1,
       "inverted": false
     },
-    "UpperLip": {
+    "RightJaw": {
       "pin": 3,
-      "wire_colors": [
-        "white",
-        "red",
-        "green"
-      ],
+      "wire_colors": ["unk", "unk", "unk"],
       "min_angle": 0,
-      "max_angle": 0,
-      "default_angle": null,
-      "current_angle": -1,
+      "max_angle": 60,
+      "inverted": false
+    },
+    "LeftJaw": {
+      "pin": 0,
+      "wire_colors": ["unk", "unk", "unk"],
+      "min_angle": 120,
+      "max_angle": 180,
       "inverted": false
     }
   },
   "expressions": {
-    "neutral": {},
-    "listening": {},
-    "thinking": {},
-    "speaking": {}
+    "neutral": {
+      "EyeLidLeftDown": 90,
+      "EyeLidLeftUp": 120,
+      "EyeLidRightDown": 170,
+      "EyeLidRightUp": 100,
+      "EyeYAxis": 120,
+      "EyeXAxis": 170
+    },
+    "listening": {
+      "EyeLidLeftDown": 90,
+      "EyeLidLeftUp": 120,
+      "EyeLidRightDown": 170,
+      "EyeLidRightUp": 100,
+      "EyeYAxis": 120,
+      "EyeXAxis": 170
+    },
+    "thinking": {
+      "EyeLidLeftDown": 90,
+      "EyeLidLeftUp": 120,
+      "EyeLidRightDown": 170,
+      "EyeLidRightUp": 100,
+      "EyeYAxis": 120,
+      "EyeXAxis": 170
+    },
+    "speaking": {
+      "EyeLidLeftDown": 90,
+      "EyeLidLeftUp": 120,
+      "EyeLidRightDown": 170,
+      "EyeLidRightUp": 100,
+      "EyeYAxis": 120,
+      "EyeXAxis": 170
+    },
+    "eyes_open": {
+      "EyeLidLeftDown": 90,
+      "EyeLidLeftUp": 120,
+      "EyeLidRightDown": 170,
+      "EyeLidRightUp": 100
+    },
+    "eyes_closed": {
+      "EyeLidLeftDown": 55,
+      "EyeLidLeftUp": 165,
+      "EyeLidRightDown": 130,
+      "EyeLidRightUp": 150
+    }
   }
 }

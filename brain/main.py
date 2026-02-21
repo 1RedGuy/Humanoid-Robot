@@ -28,6 +28,51 @@ def _load_name_to_pin() -> dict[str, int]:
         return {}
 
 
+def _load_idle_config(config_path) -> tuple[dict, dict | None, dict, dict]:
+    """Load idle section, gaze center, gaze limits, and eyes_closed from servo_data.json."""
+    try:
+        with open(config_path, "r") as f:
+            data = json.load(f)
+        raw = data.get("idle", {})
+        idle_config = {
+            "interval_min": float(raw.get("interval_min", 2.0)),
+            "interval_max": float(raw.get("interval_max", 6.0)),
+            "blink_chance": float(raw.get("blink_chance", 0.4)),
+            "blink_close_min": float(raw.get("blink_close_min", 0.04)),
+            "blink_close_max": float(raw.get("blink_close_max", 0.08)),
+            "blink_hold_min": float(raw.get("blink_hold_min", 0.06)),
+            "blink_hold_max": float(raw.get("blink_hold_max", 0.15)),
+            "blink_open_min": float(raw.get("blink_open_min", 0.04)),
+            "blink_open_max": float(raw.get("blink_open_max", 0.10)),
+            "gaze_extent_fraction": float(raw.get("gaze_extent_fraction", 0.75)),
+            "gaze_extent_x": float(raw.get("gaze_extent_x", 25)),
+            "gaze_extent_y": float(raw.get("gaze_extent_y", 8)),
+            "gaze_hold_min": float(raw.get("gaze_hold_min", 1.5)),
+            "gaze_hold_max": float(raw.get("gaze_hold_max", 3.5)),
+            "gaze_move_duration": float(raw.get("gaze_move_duration", 0.25)),
+            "gaze_return_duration": float(raw.get("gaze_return_duration", 0.3)),
+        }
+        neutral = data.get("expressions", {}).get("neutral", {})
+        gaze_center = None
+        if "EyeXAxis" in neutral and "EyeYAxis" in neutral:
+            gaze_center = {"EyeXAxis": float(neutral["EyeXAxis"]), "EyeYAxis": float(neutral["EyeYAxis"])}
+        limits = {}
+        for name in ("EyeXAxis", "EyeYAxis"):
+            cfg = data.get("servos", {}).get(name, {})
+            mn, mx = cfg.get("min_angle", 0), cfg.get("max_angle", 180)
+            if mn is not None and mx is not None:
+                limits[name] = (float(mn), float(mx))
+        eyes_closed = data.get("expressions", {}).get("eyes_closed", {})
+        eyelid_closed = {}
+        for name in ("EyeLidLeftDown", "EyeLidLeftUp", "EyeLidRightDown", "EyeLidRightUp"):
+            if name in eyes_closed and isinstance(eyes_closed[name], (int, float)):
+                eyelid_closed[name] = float(eyes_closed[name])
+        return idle_config, gaze_center, limits, eyelid_closed
+    except Exception as e:
+        print(f"[Brain] Could not load idle config: {e}")
+        return {}, None, {}, {}
+
+
 class Brain:
     def __init__(self):
         self.wake_word_detection = WakeWordDetection()
@@ -47,7 +92,16 @@ class Brain:
             name_to_pin = _load_name_to_pin()
             self.mixer = ServoMixer(self.servo_controller, name_to_pin)
             self.face_controller = FaceController(self.mixer, SERVO_DATA_PATH)
-            self.idle_behaviour = IdleBehaviour(self.mixer)
+            idle_config, gaze_center, gaze_limits, eyelid_closed = _load_idle_config(SERVO_DATA_PATH)
+            idle_enabled_path = SERVO_DATA_PATH.parent.parent / "brain" / "data" / "idle_enabled.json"
+            self.idle_behaviour = IdleBehaviour(
+                self.mixer,
+                idle_config=idle_config,
+                gaze_center=gaze_center,
+                gaze_limits=gaze_limits,
+                eyelid_closed=eyelid_closed,
+                idle_enabled_path=idle_enabled_path,
+            )
             self.face_controller.set_neutral(duration=1.0)
             robot_state.set_activity("idle")
 

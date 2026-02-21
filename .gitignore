@@ -51,3 +51,6 @@ Thumbs.db
 
 # pyenv
 .python-version
+
+old_code/
+to-do.txt

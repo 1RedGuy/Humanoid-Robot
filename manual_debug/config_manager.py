@@ -1,5 +1,4 @@
 import json
-import copy
 from pathlib import Path
 from typing import Dict, Optional, Any, List
 
@@ -7,7 +6,23 @@ from typing import Dict, Optional, Any, List
 SERVO_GROUPS = {
     "Eyes": ["EyeLidLeftDown", "EyeLidLeftUp", "EyeLidRightDown", "EyeLidRightUp", "EyeYAxis", "EyeXAxis"],
     "Eyebrows": ["EyebrowInnerRight", "EyebrowInnerLeft", "EyebrowOuterRight", "EyebrowOuterLeft"],
-    "Cheeks & Lips": ["RightCheekUp", "RightCheekDown", "LeftCheekUp", "LeftCheekDown", "UpperLip"],
+    "Cheeks": ["RightCheekUp", "RightCheekDown", "LeftCheekUp", "LeftCheekDown"],
+    "Jaw": ["LeftJaw", "RightJaw"],
+}
+
+# Single slider controls multiple servos in sync.
+# direction: +1 means angle = center + offset, -1 means angle = center - offset
+LINKED_CONTROLS = {
+    "Jaw": {
+        "label": "Jaw Open/Close",
+        "slider_min": 35,
+        "slider_max": 95,
+        "slider_default": 35,
+        "servos": {
+            "RightJaw": {"center": 95, "direction": -1},
+            "LeftJaw": {"center": 85, "direction": 1},
+        },
+    },
 }
 
 
@@ -80,6 +95,19 @@ class ConfigManager:
 
     def pin_for(self, name: str) -> Optional[int]:
         return self.name_to_pin.get(name)
+
+    def get_linked_controls(self) -> Dict[str, Any]:
+        """Return LINKED_CONTROLS filtered to servos that exist in the config."""
+        result = {}
+        for group, lc in LINKED_CONTROLS.items():
+            filtered_servos = {
+                name: mapping
+                for name, mapping in lc["servos"].items()
+                if name in self.servos
+            }
+            if filtered_servos:
+                result[group] = {**lc, "servos": filtered_servos}
+        return result
 
     def save_expression(self, name: str, angles: Dict[str, float]):
         self.expressions[name] = angles

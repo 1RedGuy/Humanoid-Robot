@@ -65,6 +65,11 @@ class ServoController:
             "servos": servos,
         })
 
+    def set_angles(self, servo_commands: List[Dict]):
+        """Set servos to target angles immediately (no interpolation)."""
+        servos = [{"servo_id": c["servo_id"], "angle": c["angle"]} for c in servo_commands]
+        self._send_command({"command": "set_angles", "servos": servos})
+
     def stop_all(self):
         """Send emergency stop command."""
         self._send_command({"command": "stop"})

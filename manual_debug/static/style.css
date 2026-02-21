@@ -1,4 +1,10 @@
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
 
 :root {
   --bg: #0f1117;
@@ -13,7 +19,8 @@
   --danger-hover: #ff6b83;
   --success: #34d399;
   --radius: 10px;
-  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font:
+    "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 body {
@@ -57,8 +64,12 @@ header h1 {
   flex-shrink: 0;
 }
 
-.indicator.disconnected { background: var(--danger); }
-.indicator.connected    { background: var(--success); }
+.indicator.disconnected {
+  background: var(--danger);
+}
+.indicator.connected {
+  background: var(--success);
+}
 
 #conn-label {
   font-size: 13px;
@@ -76,7 +87,9 @@ button {
   background: var(--surface2);
   color: var(--text);
   cursor: pointer;
-  transition: background .15s, border-color .15s;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
 }
 
 button:hover:not(:disabled) {
@@ -85,7 +98,7 @@ button:hover:not(:disabled) {
 }
 
 button:disabled {
-  opacity: .4;
+  opacity: 0.4;
   cursor: default;
 }
 
@@ -95,7 +108,7 @@ button.danger {
 }
 
 button.danger:hover:not(:disabled) {
-  background: rgba(255, 77, 106, .12);
+  background: rgba(255, 77, 106, 0.12);
   border-color: var(--danger-hover);
 }
 
@@ -112,10 +125,80 @@ button.primary:hover:not(:disabled) {
 /* ---- Controls bar ---- */
 #controls {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 10px;
   padding: 14px 24px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
+}
+
+.idle-toggle-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.idle-label {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.idle-btn {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.idle-status {
+  font-size: 12px;
+  color: var(--text-dim);
+  min-width: 2em;
+}
+
+/* ---- Eyes actions ---- */
+#eyes-actions {
+  padding: 14px 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+#eyes-actions h2 {
+  margin-bottom: 10px;
+}
+
+.eyes-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.eyes-hint {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 10px;
+  max-width: 560px;
+}
+
+.eyes-btn {
+  padding: 8px 14px;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.eyes-btn:hover:not(:disabled) {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+}
+
+.eyes-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* ---- Main layout ---- */
@@ -127,17 +210,21 @@ main {
 }
 
 @media (max-width: 860px) {
-  main { grid-template-columns: 1fr; }
+  main {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ---- Sections ---- */
-section { padding: 20px 24px; }
+section {
+  padding: 20px 24px;
+}
 
 section h2 {
   font-size: 14px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: .06em;
+  letter-spacing: 0.06em;
   color: var(--text-dim);
   margin-bottom: 16px;
 }
@@ -168,6 +255,31 @@ section h2 {
   align-items: center;
   gap: 12px;
   padding: 6px 0;
+}
+
+.slider-row.linked-slider {
+  background: var(--surface2);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+}
+
+.slider-row.linked-slider label {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.slider-row.linked-slider input[type="range"]::-webkit-slider-thumb {
+  background: var(--success);
+  width: 18px;
+  height: 18px;
+}
+
+.slider-row.linked-slider input[type="range"]::-moz-range-thumb {
+  background: var(--success);
+  width: 18px;
+  height: 18px;
 }
 
 .slider-row label {
@@ -204,7 +316,7 @@ input[type="range"]::-webkit-slider-thumb {
   background: var(--accent);
   cursor: pointer;
   border: 2px solid var(--bg);
-  transition: transform .1s;
+  transition: transform 0.1s;
 }
 
 input[type="range"]::-webkit-slider-thumb:hover {

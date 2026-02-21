@@ -111,10 +111,11 @@ class ServoMixer:
 
     async def run(self):
         """Drain the queue and send serial commands. Run as a long-lived task."""
+        loop = asyncio.get_event_loop()
         while True:
             moves = await self._queue.get()
             try:
-                self._send_moves(moves)
+                await loop.run_in_executor(None, lambda m=moves: self._send_moves(m))
             except Exception as e:
                 print(f"[ServoMixer] send error: {e}")
 
