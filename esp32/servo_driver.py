@@ -29,16 +29,14 @@ class ServoDriver:
         # Store current positions
         self.current_positions = {}
         
-        # Init: calibrate all to safe angle, then apply neutral for servos that have it (e.g. eyes center + open)
-        if self.global_config.get("calibrate_on_init", False):
-            self._calibrate_on_init()
-        if self.neutral_expression:
+        # Init: apply neutral only (no separate calibration step)
+        if self.global_config.get("calibrate_on_init", False) and self.neutral_expression:
             self._apply_neutral()
         
     def _load_servo_config(self, filename):
         """
         Load servo configuration from JSON file.
-        Returns (servos dict, global dict, neutral dict). Init: calibrate then apply neutral for ready servos.
+        Returns (servos dict, global dict, neutral dict). Init: apply neutral when calibrate_on_init.
         """
         try:
             with open(filename, 'r') as f:
@@ -74,10 +72,6 @@ class ServoDriver:
             return int(key)
         except (ValueError, TypeError):
             return None
-
-    def _calibrate_on_init(self):
-        """Move all configured servos to global calibrate_angle once at startup."""
-        self.calibrate_servos()
 
     def _apply_neutral(self):
         """Apply expressions.neutral so servos that have a neutral pose (e.g. eyes center + open) go there."""
@@ -238,13 +232,18 @@ class ServoDriver:
                 print("set_angles servo", sid, "err:", e)
 
     def calibrate_servos(self):
-        """Snap all servos to global calibrate_angle instantly (same as boot calibration)."""
-        angle = self._get_global_angle()
-        print(f"Calibrating servos to global angle {angle}°...")
+        """Snap all servos to their calibrate angle: per-servo calibrate_angle if set, else global."""
+        default_angle = self._get_global_angle()
+        print("Calibrating servos...")
         for key, config in self.servo_config.items():
             servo_id = self._servo_id_from_key(key, config)
             if servo_id is None:
                 continue
+            angle = config.get("calibrate_angle")
+            if angle is None:
+                angle = default_angle
+            else:
+                angle = float(angle)
             clamped = self._clamp_angle(servo_id, angle)
             self.current_positions[servo_id] = clamped
             self.pca.servo_set_angle(servo_id, self._apply_inversion(servo_id, clamped))

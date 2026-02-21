@@ -10,7 +10,7 @@
     "_comment": "Brain idle behaviour: blink and random gaze. eyes_closed angles come from expressions.eyes_closed.",
     "interval_min": 2.0,
     "interval_max": 6.0,
-    "blink_chance": 0.4,
+    "blink_chance": 0.5,
     "blink_close_min": 0.04,
     "blink_close_max": 0.08,
     "blink_hold_min": 0.06,
@@ -72,56 +72,56 @@
       "pin": 6,
       "wire_colors": ["red", "red", "red"],
       "min_angle": 30,
-      "max_angle": 90,
+      "max_angle": 200,
       "inverted": false
     },
     "EyebrowInnerLeft": {
       "pin": 9,
       "wire_colors": ["white", "white", "red"],
-      "min_angle": 65,
-      "max_angle": 130,
+      "min_angle": 0,
+      "max_angle": 160,
       "inverted": false
     },
     "EyebrowOuterRight": {
       "pin": 7,
       "wire_colors": ["white", "white", "white"],
-      "min_angle": 45,
-      "max_angle": 140,
+      "min_angle": 70,
+      "max_angle": 260,
       "inverted": false
     },
     "EyebrowOuterLeft": {
       "pin": 8,
       "wire_colors": ["green", "white", "green"],
-      "min_angle": 20,
-      "max_angle": 110,
+      "min_angle": 80,
+      "max_angle": 250,
       "inverted": false
     },
     "RightCheekUp": {
       "pin": 2,
       "wire_colors": ["red", "white", "red"],
-      "min_angle": 0,
-      "max_angle": 0,
+      "min_angle": 240,
+      "max_angle": 310,
       "inverted": false
     },
     "RightCheekDown": {
       "pin": 1,
       "wire_colors": ["red", "green", "red"],
-      "min_angle": 0,
-      "max_angle": 0,
+      "min_angle": 10,
+      "max_angle": 160,
       "inverted": false
     },
     "LeftCheekUp": {
       "pin": 5,
       "wire_colors": ["green", "white", "white"],
       "min_angle": 0,
-      "max_angle": 0,
+      "max_angle": 80,
       "inverted": false
     },
     "LeftCheekDown": {
       "pin": 4,
       "wire_colors": ["white", "red", "red"],
-      "min_angle": 0,
-      "max_angle": 0,
+      "min_angle": 110,
+      "max_angle": 360,
       "inverted": false
     },
     "RightJaw": {
@@ -146,7 +146,15 @@
       "EyeLidRightDown": 170,
       "EyeLidRightUp": 100,
       "EyeYAxis": 120,
-      "EyeXAxis": 170
+      "EyeXAxis": 170,
+      "EyebrowInnerRight": 170,
+      "EyebrowInnerLeft": 30,
+      "EyebrowOuterRight": 160,
+      "EyebrowOuterLeft": 180,
+      "LeftCheekUp": 270,
+      "LeftCheekDown": 110,
+      "RightCheekUp": 270,
+      "RightCheekDown": 110
     },
     "listening": {
       "EyeLidLeftDown": 90,
