@@ -1,5 +1,6 @@
 import asyncio
 import os
+from typing import Callable, Optional
 
 import numpy as np
 import pyaudio
@@ -9,7 +10,8 @@ from brain.config import WakeWordDetectionKeywords
 
 
 class WakeWordDetection:
-    def __init__(self):
+    def __init__(self, on_event: Optional[Callable] = None):
+        self._emit = on_event or (lambda t, d: None)
         self.porcupine = pvporcupine.create(
             access_key=os.getenv("PORCUPINE_API_KEY"),
             keywords=WakeWordDetectionKeywords,
@@ -18,6 +20,7 @@ class WakeWordDetection:
         self.stream = None
 
     def _run_blocking(self) -> bool:
+        self._emit("wake_word.listening", {})
         try:
             sample_rate = self.porcupine.sample_rate
             frame_length = self.porcupine.frame_length
@@ -39,6 +42,8 @@ class WakeWordDetection:
                     keyword_index = self.porcupine.process(pcm_array)
 
                     if keyword_index >= 0:
+                        keyword = WakeWordDetectionKeywords[keyword_index] if keyword_index < len(WakeWordDetectionKeywords) else "unknown"
+                        self._emit("wake_word.detected", {"keyword": keyword})
                         return True
 
                 except Exception as e:

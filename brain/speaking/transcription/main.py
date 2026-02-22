@@ -16,7 +16,7 @@ class Transcription:
             )
         self.client = openai.OpenAI(api_key=self.api_key)
 
-    def transcribe(self, audio_data: bytes, language: str = "bg") -> str:
+    def transcribe(self, audio_data: bytes, language: str = "") -> str:
         if not audio_data:
             return ""
             
@@ -32,11 +32,10 @@ class Transcription:
         audio_buffer.seek(0)
 
         try:
-            transcript = self.client.audio.transcriptions.create(
-                model="whisper-1", 
-                file=audio_buffer,
-                language=language
-            )
+            kwargs = {"model": "whisper-1", "file": audio_buffer}
+            if language:
+                kwargs["language"] = language
+            transcript = self.client.audio.transcriptions.create(**kwargs)
             return transcript.text
         except Exception as e:
             print(f"Transcription error: {e}")

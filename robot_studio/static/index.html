@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Robot Studio</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <!-- Top bar -->
+    <header id="topbar">
+      <div class="topbar-left">
+        <h1>Robot Studio</h1>
+        <div id="mode-tabs" class="mode-tabs">
+          <button class="mode-tab active" data-mode="manual">Manual</button>
+          <button class="mode-tab" data-mode="auto">Auto</button>
+          <button class="mode-tab" data-mode="history">History</button>
+        </div>
+      </div>
+      <div id="connection">
+        <span id="conn-indicator" class="indicator disconnected"></span>
+        <span id="conn-label">Disconnected</span>
+        <button id="btn-connect">Connect</button>
+        <button id="btn-disconnect" disabled>Disconnect</button>
+      </div>
+    </header>
+
+    <!-- ============ MANUAL MODE ============ -->
+    <div id="manual-mode">
+      <!-- Controls bar -->
+      <section id="controls">
+        <button id="btn-calibrate" class="ctrl-btn" disabled>
+          Calibrate All
+        </button>
+        <button id="btn-stop" class="ctrl-btn danger">Emergency Stop</button>
+        <button id="btn-reload" class="ctrl-btn">Reload Config</button>
+        <span class="idle-toggle-wrap">
+          <span class="idle-label">Idle:</span>
+          <button id="btn-idle-on" class="ctrl-btn idle-btn" type="button">On</button>
+          <button id="btn-idle-off" class="ctrl-btn idle-btn" type="button">Off</button>
+          <span id="idle-status" class="idle-status"></span>
+        </span>
+      </section>
+
+      <!-- Lip Sync Test -->
+      <section id="lip-sync-test">
+        <h2>Lip Sync Test</h2>
+        <p class="lip-sync-hint">Enter text, then Play. TTS is sent to ElevenLabs; audio plays and jaw/lip move in sync. Requires <strong>Idle Off</strong>, <strong>ESP32 connected</strong>, and <strong>ELEVENLABS_API_KEY</strong> in .env.</p>
+        <div class="lip-sync-controls">
+          <textarea id="lip-sync-text" rows="3" placeholder="e.g. Hello world"></textarea>
+          <button id="btn-lip-sync-play" class="ctrl-btn" disabled>Play with lip sync</button>
+          <span id="lip-sync-status" class="lip-sync-status"></span>
+        </div>
+      </section>
+
+      <!-- Eyes quick actions -->
+      <section id="eyes-actions">
+        <h2>Eyes</h2>
+        <div class="eyes-buttons">
+          <button id="btn-eyes-center" class="eyes-btn" disabled>Center eyes</button>
+          <button id="btn-eyes-open" class="eyes-btn" disabled>Open eyes</button>
+          <button id="btn-eyes-close" class="eyes-btn" disabled>Close eyes</button>
+          <button id="btn-random-look" class="eyes-btn" disabled>Random look (then back)</button>
+          <button id="btn-blink-left" class="eyes-btn" disabled>Left eye blink</button>
+          <button id="btn-blink-right" class="eyes-btn" disabled>Right eye blink</button>
+          <button id="btn-blink-both" class="eyes-btn" disabled>Both eyes blink</button>
+        </div>
+        <p class="eyes-hint" id="eyes-hint">When <strong>Idle</strong> is On (above), blink and random gaze run here; servos and expressions are locked until you turn Idle Off.</p>
+      </section>
+
+      <main>
+        <!-- Servo sliders -->
+        <section id="servos">
+          <h2>Servos</h2>
+          <div id="server-error" class="server-error" style="display: none"></div>
+          <div id="servo-groups">
+            <p id="load-message" class="load-message">Loading…</p>
+          </div>
+        </section>
+
+        <!-- Expressions -->
+        <section id="expressions">
+          <h2>Expressions</h2>
+          <div id="expr-list"></div>
+          <div id="expr-save">
+            <input type="text" id="expr-name" placeholder="Expression name…" />
+            <button id="btn-save-expr">Save Current</button>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <!-- ============ AUTO MODE ============ -->
+    <div id="auto-mode" style="display:none">
+      <!-- Brain controls -->
+      <section id="auto-controls">
+        <div class="auto-controls-left">
+          <button id="btn-brain-start" class="ctrl-btn primary">Start Brain</button>
+          <button id="btn-brain-stop" class="ctrl-btn danger" disabled>Stop Brain</button>
+        </div>
+        <div class="state-indicator-wrap">
+          <span class="state-label">State:</span>
+          <span id="state-badge" class="state-badge state-idle">IDLE</span>
+        </div>
+        <div class="expression-indicator-wrap">
+          <span class="state-label">Expression:</span>
+          <span id="expression-badge" class="expression-badge">neutral</span>
+        </div>
+      </section>
+
+      <!-- Main auto mode content -->
+      <div class="auto-panels">
+        <!-- Left: Conversation -->
+        <div class="auto-panel conversation-panel">
+          <h2>Conversation</h2>
+          <div id="conversation-messages" class="conversation-messages">
+            <div class="conversation-empty">No conversation yet. Start the brain and speak a wake word.</div>
+          </div>
+        </div>
+
+        <!-- Right: Event Log -->
+        <div class="auto-panel event-panel">
+          <h2>
+            Event Log
+            <div class="event-filters">
+              <button class="filter-btn active" data-filter="all">All</button>
+              <button class="filter-btn" data-filter="state">State</button>
+              <button class="filter-btn" data-filter="conversation">Conv</button>
+              <button class="filter-btn" data-filter="brain">Brain</button>
+              <button class="filter-btn" data-filter="idle">Idle</button>
+            </div>
+          </h2>
+          <div id="event-log" class="event-log"></div>
+          <div class="event-log-footer">
+            <button id="btn-clear-events" class="ctrl-btn">Clear</button>
+            <span id="event-count" class="event-count">0 events</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom: Metrics -->
+      <section id="metrics-bar" class="metrics-bar">
+        <div class="metric">
+          <span class="metric-label">Transcription</span>
+          <span id="metric-transcription" class="metric-value">--</span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">LLM</span>
+          <span id="metric-llm" class="metric-value">--</span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">TTS</span>
+          <span id="metric-tts" class="metric-value">--</span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">Total Response</span>
+          <span id="metric-total" class="metric-value">--</span>
+        </div>
+      </section>
+    </div>
+
+    <!-- ============ HISTORY MODE ============ -->
+    <div id="history-mode" style="display:none">
+      <div class="history-tabs">
+        <button class="history-tab active" data-section="conversations">Conversations</button>
+        <button class="history-tab" data-section="surroundings">Surroundings</button>
+        <button class="history-tab" data-section="logs">Session Logs</button>
+      </div>
+
+      <!-- Conversations section -->
+      <div id="history-conversations" class="history-section">
+        <div id="conv-list" class="history-list">
+          <p class="history-empty">Loading conversations...</p>
+        </div>
+        <div id="conv-detail" class="history-detail" style="display:none">
+          <button id="btn-conv-back" class="ctrl-btn history-back-btn">Back</button>
+          <div id="conv-detail-header" class="conv-detail-header"></div>
+          <div id="conv-detail-messages" class="conv-detail-messages"></div>
+        </div>
+      </div>
+
+      <!-- Surroundings section -->
+      <div id="history-surroundings" class="history-section" style="display:none">
+        <div id="surroundings-gallery" class="surroundings-gallery">
+          <p class="history-empty">Loading surroundings...</p>
+        </div>
+        <div id="surroundings-detail" class="history-detail" style="display:none">
+          <button id="btn-surr-back" class="ctrl-btn history-back-btn">Back</button>
+          <div id="surr-detail-content" class="surr-detail-content"></div>
+        </div>
+      </div>
+
+      <!-- Logs section -->
+      <div id="history-logs" class="history-section" style="display:none">
+        <div id="log-list" class="history-list">
+          <p class="history-empty">Loading logs...</p>
+        </div>
+        <div id="log-detail" class="history-detail" style="display:none">
+          <button id="btn-log-back" class="ctrl-btn history-back-btn">Back</button>
+          <div id="log-detail-header" class="log-detail-header"></div>
+          <div id="log-detail-events" class="event-log"></div>
+        </div>
+      </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

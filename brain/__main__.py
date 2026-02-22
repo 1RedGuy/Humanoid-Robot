@@ -1,6 +1,5 @@
 import asyncio
 import json
-from typing import Callable, Optional
 from dotenv import load_dotenv
 
 from .audio.wake_word_detection.main import WakeWordDetection
@@ -30,8 +29,8 @@ def _load_name_to_pin() -> dict[str, int]:
         return {}
 
 
-def _load_idle_config(config_path) -> tuple[dict, dict | None, dict, dict, dict]:
-    """Load idle section, gaze center, gaze limits, eyes_closed, and eyes_open from servo_data.json."""
+def _load_idle_config(config_path) -> tuple[dict, dict | None, dict, dict]:
+    """Load idle section, gaze center, gaze limits, and eyes_closed from servo_data.json."""
     try:
         with open(config_path, "r") as f:
             data = json.load(f)
@@ -64,21 +63,15 @@ def _load_idle_config(config_path) -> tuple[dict, dict | None, dict, dict, dict]
             mn, mx = cfg.get("min_angle", 0), cfg.get("max_angle", 180)
             if mn is not None and mx is not None:
                 limits[name] = (float(mn), float(mx))
-        eyelid_names = ("EyeLidLeftDown", "EyeLidLeftUp", "EyeLidRightDown", "EyeLidRightUp")
         eyes_closed = data.get("expressions", {}).get("eyes_closed", {})
         eyelid_closed = {}
-        for name in eyelid_names:
+        for name in ("EyeLidLeftDown", "EyeLidLeftUp", "EyeLidRightDown", "EyeLidRightUp"):
             if name in eyes_closed and isinstance(eyes_closed[name], (int, float)):
                 eyelid_closed[name] = float(eyes_closed[name])
-        eyes_open = data.get("expressions", {}).get("eyes_open", {})
-        eyelid_open = {}
-        for name in eyelid_names:
-            if name in eyes_open and isinstance(eyes_open[name], (int, float)):
-                eyelid_open[name] = float(eyes_open[name])
-        return idle_config, gaze_center, limits, eyelid_closed, eyelid_open
+        return idle_config, gaze_center, limits, eyelid_closed
     except Exception as e:
         print(f"[Brain] Could not load idle config: {e}")
-        return {}, None, {}, {}, {}
+        return {}, None, {}, {}
 
 
 def _load_lip_sync_config(config_path) -> dict:
@@ -93,17 +86,11 @@ def _load_lip_sync_config(config_path) -> dict:
 
 
 class Brain:
-    def __init__(
-        self,
-        servo_controller=None,
-        on_event: Optional[Callable] = None,
-    ):
-        self.on_event = on_event or (lambda t, d: None)
-        self._external_servo = servo_controller
-        self.wake_word_detection = WakeWordDetection(on_event=self.on_event)
+    def __init__(self):
+        self.wake_word_detection = WakeWordDetection()
         self.initial_boot = InitialBoot()
 
-        self.servo_controller = servo_controller
+        self.servo_controller = None
         self.mixer = None
         self.face_controller = None
         self.lip_sync = None
@@ -112,16 +99,13 @@ class Brain:
 
     async def run(self):
         """Main entry point for the Brain."""
-        if self._external_servo:
-            self.servo_controller = self._external_servo
-        else:
-            self.servo_controller = await self.initial_boot.run()
+        self.servo_controller = await self.initial_boot.run()
 
         if self.servo_controller:
             name_to_pin = _load_name_to_pin()
-            self.mixer = ServoMixer(self.servo_controller, name_to_pin, on_event=self.on_event)
+            self.mixer = ServoMixer(self.servo_controller, name_to_pin)
             self.face_controller = FaceController(self.mixer, SERVO_DATA_PATH)
-            idle_config, gaze_center, gaze_limits, eyelid_closed, eyelid_open = _load_idle_config(SERVO_DATA_PATH)
+            idle_config, gaze_center, gaze_limits, eyelid_closed = _load_idle_config(SERVO_DATA_PATH)
             idle_enabled_path = SERVO_DATA_PATH.parent.parent / "brain" / "data" / "idle_enabled.json"
             self.idle_behaviour = IdleBehaviour(
                 self.mixer,
@@ -129,9 +113,7 @@ class Brain:
                 gaze_center=gaze_center,
                 gaze_limits=gaze_limits,
                 eyelid_closed=eyelid_closed,
-                eyelid_open=eyelid_open,
                 idle_enabled_path=idle_enabled_path,
-                on_event=self.on_event,
             )
             lip_sync_config = _load_lip_sync_config(SERVO_DATA_PATH)
             if lip_sync_config.get("enabled", True):
@@ -143,7 +125,6 @@ class Brain:
         self.conversation_manager = ConversationManager(
             face_controller=self.face_controller,
             lip_sync=self.lip_sync,
-            on_event=self.on_event,
         )
 
         async with asyncio.TaskGroup() as tg:
@@ -168,25 +149,12 @@ class Brain:
     async def _wake_word_loop(self):
         """Continuously listen for wake word and start conversations."""
         while True:
-            try:
-                detected = await self.wake_word_detection.run()
-            except Exception as e:
-                print(f"[Brain] Wake word detection error: {e}")
-                self.on_event("brain.error", {"error": f"Wake word detection: {e}"})
-                await asyncio.sleep(1)
-                continue
+            detected = await self.wake_word_detection.run()
 
             if detected:
                 print("Wake word detected! Starting conversation...")
                 await self._wink_right_eye()
-                try:
-                    await self.conversation_manager.run()
-                except Exception as e:
-                    print(f"[Brain] Conversation error: {e}")
-                    self.on_event("brain.error", {"error": f"Conversation: {e}"})
-                    if self.face_controller:
-                        self.face_controller.set_neutral(duration=0.3)
-                    robot_state.set_activity("idle")
+                await self.conversation_manager.run()
                 print("Conversation ended. Listening for wake word again...")
 
 

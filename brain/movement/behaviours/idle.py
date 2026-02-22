@@ -3,16 +3,17 @@ Idle behaviour — periodic blinking and random gaze (look left/right).
 
 All timing and angles come from servo_data.json (idle section and expressions.eyes_closed).
 Uses the ServoMixer blink layer (priority 10) and idle_gaze layer (priority 5).
-When idle_enabled_path is set, a JSON file is read each loop to allow toggling idle on/off from manual_debug.
+When idle_enabled_path is set, a JSON file is read each loop to allow toggling idle on/off from Robot Studio.
 """
 
 import asyncio
 import json
 import random
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Callable, Dict, Optional
 
 from brain.movement.servo_mixer import ServoMixer
+from brain.state import robot_state
 
 BLINK_LAYER = "blink"
 BLINK_PRIORITY = 10
@@ -30,14 +31,18 @@ class IdleBehaviour:
         gaze_center: Optional[Dict[str, float]] = None,
         gaze_limits: Optional[Dict[str, tuple]] = None,
         eyelid_closed: Optional[Dict[str, float]] = None,
+        eyelid_open: Optional[Dict[str, float]] = None,
         idle_enabled_path: Optional[Path] = None,
+        on_event: Optional[Callable] = None,
     ):
         self._mixer = mixer
         self._idle = idle_config or {}
         self._gaze_center = gaze_center or {}
         self._gaze_limits = gaze_limits or {}
         self._eyelid_closed = eyelid_closed or {}
+        self._eyelid_open = eyelid_open or {}
         self._idle_enabled_path = Path(idle_enabled_path) if idle_enabled_path else None
+        self._emit = on_event or (lambda t, d: None)
 
     def _is_idle_enabled(self) -> bool:
         if self._idle_enabled_path is None or not self._idle_enabled_path.exists():
@@ -101,11 +106,19 @@ class IdleBehaviour:
             duration=close_duration,
         )
         await asyncio.sleep(close_duration + hold_duration)
-        self._mixer.release_layer(BLINK_LAYER, duration=open_duration)
-        await asyncio.sleep(open_duration)
+        # Use instant set_angles for open (same as manual mode) — smaller payload,
+        # no duration, more reliable than release_layer fallback.
+        if self._eyelid_open:
+            self._mixer.enqueue_instant_angles(self._eyelid_open)
+            await asyncio.sleep(open_duration + 0.05)
+        self._mixer.release_layer(BLINK_LAYER, duration=0.0)
 
     async def run(self):
-        """Idle loop — blink and random gaze. Checks idle_enabled file each cycle."""
+        """Idle loop — blink and random gaze.
+
+        Respects both the idle_enabled file (manual toggle) and the current
+        robot activity so that servos stay silent during listening.
+        """
         interval_min = self._idle.get("interval_min", 2.0)
         interval_max = self._idle.get("interval_max", 6.0)
         blink_chance = self._idle.get("blink_chance", 0.4)
@@ -113,10 +126,28 @@ class IdleBehaviour:
             if not self._is_idle_enabled():
                 await asyncio.sleep(0.5)
                 continue
+
+            activity = robot_state.get_activity()
+
+            if activity in ("listening", "speaking"):
+                await asyncio.sleep(0.1)
+                continue
+
             interval = random.uniform(interval_min, interval_max)
             await asyncio.sleep(interval)
+
+            # Re-check after sleeping — state may have changed.
+            activity = robot_state.get_activity()
+            if activity in ("listening", "speaking"):
+                continue
+
+            # During thinking only blink (no gaze) to stay alive
+            # without shifting eye focus away from the user.
+            blink_only = activity == "thinking"
+
             do_gaze = (
-                self._gaze_center
+                not blink_only
+                and self._gaze_center
                 and "EyeXAxis" in self._gaze_center
                 and "EyeYAxis" in self._gaze_center
                 and random.random() > blink_chance
@@ -124,7 +155,9 @@ class IdleBehaviour:
             try:
                 if do_gaze:
                     await self.random_look()
+                    self._emit("idle.gaze", {})
                 else:
                     await self.blink()
+                    self._emit("idle.blink", {})
             except Exception as e:
                 print(f"[IdleBehaviour] idle error: {e}")

@@ -55,6 +55,7 @@ class AudioCapture:
         self, 
         threshold: Optional[float] = None, 
         silence_duration: float = 6.0,
+        post_speech_silence: float = 1.5,
         max_duration: float = 20.0
     ) -> Optional[bytes]:
         """
@@ -62,14 +63,17 @@ class AudioCapture:
         
         Args:
             threshold: RMS threshold for speech detection. If None, auto-calibrates.
-            silence_duration: Seconds of silence to wait before stopping recording.
+            silence_duration: Seconds with no speech at all before ending the
+                conversation (user never started talking).
+            post_speech_silence: Seconds of silence after speech to consider the
+                utterance complete.
             max_duration: Maximum total duration to record in seconds.
             
         Returns:
-            - Raw audio bytes (WAV format ready) if speech detected and captured successfully
-              (ends when silence_duration seconds of silence detected after speech, OR
-               when max_duration reached while still talking - process what we have)
-            - None if no speech detected for silence_duration (6s) - ends conversation
+            - Raw audio bytes (WAV format ready) if speech detected and captured
+              successfully (ends when post_speech_silence of silence detected after
+              speech, OR when max_duration reached while still talking)
+            - None if no speech detected for silence_duration - ends conversation
         """
         
         if self.stream is None or not self.stream.is_active():
@@ -138,7 +142,7 @@ class AudioCapture:
                 if rms < threshold:
                     if silence_start_time is None:
                         silence_start_time = time.time()
-                    elif time.time() - silence_start_time > silence_duration:
+                    elif time.time() - silence_start_time > post_speech_silence:
                         break
                 else:
                     silence_start_time = None

@@ -7,13 +7,15 @@ import time
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
 from .serial_client import SerialClient
 from .config_manager import ConfigManager
+from .event_bus import EventBus
+from .brain_runner import BrainRunner
 
 STATIC_DIR = Path(__file__).parent / "static"
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -25,13 +27,17 @@ def create_app(
     config_path: Optional[str] = None,
     serial_port: Optional[str] = None,
 ) -> FastAPI:
-    app = FastAPI(title="Manual Debug - Humanoid Robot")
+    app = FastAPI(title="Robot Studio - Humanoid Robot")
 
     cfg = ConfigManager(config_path or DEFAULT_CONFIG)
     serial = SerialClient(port=serial_port)
+    event_bus = EventBus()
+    brain_runner = BrainRunner()
 
     positions: Dict[str, float] = {}
     idle_running = {"value": False}  # mutable so closure can set it
+    current_mode = {"value": "manual"}  # "manual" or "auto"
+    ws_clients: List[WebSocket] = []
 
     def _init_positions():
         positions.clear()
@@ -381,7 +387,7 @@ def create_app(
 
     @app.post("/api/eyes/random-look")
     async def eyes_random_look():
-        """One-shot random look: move gaze to random offset from center, hold, then return. Works from manual_debug without the brain."""
+        """One-shot random look: move gaze to random offset from center, hold, then return."""
         _reject_if_idle()
         if not serial.is_connected:
             raise HTTPException(status_code=503, detail="Not connected to ESP32")
@@ -507,7 +513,7 @@ def create_app(
             positions[_n] = a
         return {"ok": True}
 
-    # --- Local idle (manual_debug: blink + random gaze; blocks servo/expression control) ----
+    # --- Local idle (manual mode: blink + random gaze; blocks servo/expression control) ----
 
     async def _do_blink():
         """One blink: close (timed move), hold, then open (instant set) so open is never dropped."""
@@ -617,7 +623,7 @@ def create_app(
             asyncio.create_task(_idle_loop())
         return {"idle_running": idle_running["value"]}
 
-    # --- Idle (brain) file: brain reads this when it runs; optional for manual_debug ----
+    # --- Idle (brain) file: brain reads this when it runs; optional for manual mode ----
 
     @app.get("/api/idle-enabled")
     async def get_idle_enabled():
@@ -635,6 +641,247 @@ def create_app(
         IDLE_ENABLED_PATH.parent.mkdir(parents=True, exist_ok=True)
         IDLE_ENABLED_PATH.write_text(json.dumps({"idle_enabled": bool(enabled)}, indent=2))
         return {"idle_enabled": bool(enabled)}
+
+    # --- Mode switching -------------------------------------------------------
+
+    @app.get("/api/mode")
+    async def get_mode():
+        return {"mode": current_mode["value"]}
+
+    @app.post("/api/mode")
+    async def set_mode(body: dict):
+        mode = body.get("mode", "manual")
+        if mode not in ("manual", "auto"):
+            raise HTTPException(status_code=400, detail="mode must be 'manual' or 'auto'")
+        old = current_mode["value"]
+        if mode == old:
+            return {"mode": mode}
+
+        if mode == "auto":
+            idle_running["value"] = False
+            if not serial.is_connected:
+                raise HTTPException(status_code=503, detail="Connect to ESP32 first")
+            current_mode["value"] = "auto"
+        else:
+            if brain_runner.running:
+                await brain_runner.stop()
+            current_mode["value"] = "manual"
+        return {"mode": current_mode["value"]}
+
+    # --- Brain control (auto mode) -------------------------------------------
+
+    @app.post("/api/brain/start")
+    async def brain_start():
+        if current_mode["value"] != "auto":
+            raise HTTPException(status_code=409, detail="Switch to auto mode first")
+        if brain_runner.running:
+            raise HTTPException(status_code=409, detail="Brain is already running")
+        if not serial.is_connected:
+            raise HTTPException(status_code=503, detail="Not connected to ESP32")
+        await brain_runner.start(serial, event_bus)
+        return {"ok": True}
+
+    @app.post("/api/brain/stop")
+    async def brain_stop():
+        await brain_runner.stop()
+        return {"ok": True}
+
+    @app.get("/api/brain/status")
+    async def brain_status():
+        from brain.state import robot_state
+        return {
+            "running": brain_runner.running,
+            "activity": robot_state.get_activity(),
+            "expression": robot_state.get_current_expression(),
+        }
+
+    # --- Data browser API (conversations, surroundings, logs) ---------------
+
+    DATA_DIR = PROJECT_ROOT / "brain" / "data"
+    CONVERSATIONS_DIR = DATA_DIR / "conversations"
+    SURROUNDINGS_DIR = DATA_DIR / "surroundings"
+    LOGS_DIR = DATA_DIR / "logs"
+
+    @app.get("/api/data/conversations")
+    async def list_conversations():
+        if not CONVERSATIONS_DIR.exists():
+            return {"conversations": []}
+        items = []
+        for p in sorted(CONVERSATIONS_DIR.iterdir(), reverse=True):
+            if not p.is_dir():
+                continue
+            meta = {"id": p.name, "start_time": None, "message_count": 0, "duration_s": None}
+            conv_json = p / "conversation.json"
+            if conv_json.exists():
+                try:
+                    data = json.loads(conv_json.read_text())
+                    meta["start_time"] = data.get("conversation_start_time")
+                    meta["message_count"] = len(data.get("messages", []))
+                    if data.get("conversation_start_time") and data.get("conversation_end_time"):
+                        meta["duration_s"] = round(data["conversation_end_time"] - data["conversation_start_time"], 1)
+                except Exception:
+                    pass
+            audio_files = [f.name for f in p.iterdir() if f.suffix in (".wav", ".mp3")]
+            meta["audio_files"] = audio_files
+            items.append(meta)
+        return {"conversations": items}
+
+    def _find_nearby_surroundings(start_time, end_time, margin=120):
+        """Find surroundings images taken within `margin` seconds of the conversation window."""
+        from datetime import datetime
+        images_dir = SURROUNDINGS_DIR / "images"
+        contexts_dir = SURROUNDINGS_DIR / "contexts"
+        if not images_dir.exists():
+            return []
+        t_start = (start_time or 0) - margin
+        t_end = (end_time or start_time or 0) + margin
+        matches = []
+        for img in images_dir.iterdir():
+            if img.suffix.lower() not in (".jpg", ".jpeg", ".png"):
+                continue
+            try:
+                dt = datetime.strptime(img.stem, "%Y-%m-%d_%H-%M-%S")
+                ts = dt.timestamp()
+            except Exception:
+                continue
+            if t_start <= ts <= t_end:
+                has_context = (contexts_dir / f"{img.stem}.txt").exists() if contexts_dir.exists() else False
+                matches.append({
+                    "timestamp": img.stem,
+                    "image": img.name,
+                    "has_context": has_context,
+                })
+        matches.sort(key=lambda x: x["timestamp"])
+        return matches
+
+    @app.get("/api/data/conversations/{conv_id}")
+    async def get_conversation(conv_id: str):
+        conv_dir = CONVERSATIONS_DIR / conv_id
+        if not conv_dir.exists():
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        conv_json = conv_dir / "conversation.json"
+        if not conv_json.exists():
+            raise HTTPException(status_code=404, detail="conversation.json not found")
+        try:
+            data = json.loads(conv_json.read_text())
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error reading conversation: {e}")
+        audio_files = [f.name for f in conv_dir.iterdir() if f.suffix in (".wav", ".mp3")]
+        data["audio_files"] = audio_files
+        data["surroundings"] = _find_nearby_surroundings(
+            data.get("conversation_start_time"),
+            data.get("conversation_end_time"),
+        )
+        return data
+
+    @app.get("/api/data/conversations/{conv_id}/audio/{filename}")
+    async def get_conversation_audio(conv_id: str, filename: str):
+        file_path = CONVERSATIONS_DIR / conv_id / filename
+        if not file_path.exists() or not file_path.is_file():
+            raise HTTPException(status_code=404, detail="Audio file not found")
+        suffix = file_path.suffix.lower()
+        media = "audio/mpeg" if suffix == ".mp3" else "audio/wav"
+        return Response(content=file_path.read_bytes(), media_type=media,
+                        headers={"Content-Disposition": f"inline; filename=\"{filename}\""})
+
+    @app.get("/api/data/surroundings")
+    async def list_surroundings():
+        images_dir = SURROUNDINGS_DIR / "images"
+        contexts_dir = SURROUNDINGS_DIR / "contexts"
+        items = []
+        if images_dir.exists():
+            for img in sorted(images_dir.iterdir(), reverse=True):
+                if img.suffix.lower() not in (".jpg", ".jpeg", ".png"):
+                    continue
+                stem = img.stem
+                has_context = (contexts_dir / f"{stem}.txt").exists() if contexts_dir.exists() else False
+                items.append({
+                    "timestamp": stem,
+                    "image": img.name,
+                    "has_context": has_context,
+                })
+        return {"surroundings": items}
+
+    @app.get("/api/data/surroundings/images/{filename}")
+    async def get_surroundings_image(filename: str):
+        file_path = SURROUNDINGS_DIR / "images" / filename
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail="Image not found")
+        suffix = file_path.suffix.lower()
+        media = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png"}.get(suffix.lstrip("."), "image/jpeg")
+        return Response(content=file_path.read_bytes(), media_type=media)
+
+    @app.get("/api/data/surroundings/contexts/{filename}")
+    async def get_surroundings_context(filename: str):
+        file_path = SURROUNDINGS_DIR / "contexts" / filename
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail="Context file not found")
+        return Response(content=file_path.read_text(encoding="utf-8"), media_type="text/plain")
+
+    @app.get("/api/data/logs")
+    async def list_logs():
+        if not LOGS_DIR.exists():
+            return {"logs": []}
+        items = []
+        for f in sorted(LOGS_DIR.iterdir(), reverse=True):
+            if f.suffix == ".jsonl":
+                items.append({
+                    "filename": f.name,
+                    "size_bytes": f.stat().st_size,
+                    "modified": f.stat().st_mtime,
+                })
+        return {"logs": items}
+
+    @app.get("/api/data/logs/{filename}")
+    async def get_log_file(filename: str):
+        file_path = LOGS_DIR / filename
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail="Log file not found")
+        lines = []
+        for line in file_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line:
+                try:
+                    lines.append(json.loads(line))
+                except Exception:
+                    pass
+        return {"filename": filename, "events": lines}
+
+    # --- WebSocket (real-time event stream) ----------------------------------
+
+    @app.websocket("/ws")
+    async def websocket_endpoint(ws: WebSocket):
+        await ws.accept()
+        loop = asyncio.get_event_loop()
+        queue: asyncio.Queue = asyncio.Queue()
+
+        def on_event(event):
+            try:
+                loop.call_soon_threadsafe(queue.put_nowait, event.to_dict())
+            except Exception:
+                pass
+
+        event_bus.subscribe(on_event)
+        ws_clients.append(ws)
+        try:
+            history = event_bus.get_history(last_n=50)
+            if history:
+                await ws.send_json({"type": "history", "events": history})
+
+            while True:
+                try:
+                    msg = await asyncio.wait_for(queue.get(), timeout=30)
+                    await ws.send_json(msg)
+                except asyncio.TimeoutError:
+                    await ws.send_json({"type": "ping"})
+        except WebSocketDisconnect:
+            pass
+        except Exception:
+            pass
+        finally:
+            event_bus.unsubscribe(on_event)
+            if ws in ws_clients:
+                ws_clients.remove(ws)
 
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 

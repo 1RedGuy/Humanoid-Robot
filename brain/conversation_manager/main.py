@@ -4,9 +4,9 @@ import time
 import json
 import wave
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
-from brain.config import PROJECT_ROOT
+from brain.config import PROJECT_ROOT, transcription_language
 from brain.state import robot_state
 from brain.audio.capture.main import AudioCapture
 from brain.speaking.transcription.main import Transcription
@@ -20,6 +20,7 @@ class ConversationManager:
         self,
         face_controller: Optional[FaceController] = None,
         lip_sync: Optional[LipSyncController] = None,
+        on_event: Optional[Callable] = None,
     ):
         self.audio_capture = AudioCapture()
         self.transcription = Transcription()
@@ -28,6 +29,7 @@ class ConversationManager:
         self.lip_sync = lip_sync
         self.conversation_id = None
         self.save_dir = None
+        self._emit = on_event or (lambda t, d: None)
 
     # ── helpers ──
 
@@ -41,10 +43,12 @@ class ConversationManager:
     def _start_lip_sync(self, alignment: dict | None):
         if self.lip_sync and alignment:
             self.lip_sync.start(alignment)
+            self._emit("lip_sync.started", {})
 
     def _stop_lip_sync(self):
         if self.lip_sync:
             self.lip_sync.stop()
+            self._emit("lip_sync.stopped", {})
 
     # ── conversation flow (blocking, runs in worker thread) ──
 
@@ -57,12 +61,14 @@ class ConversationManager:
         self.save_dir.mkdir(parents=True, exist_ok=True)
 
         self.conversation_data = {
-            "conversation_id": self.conversation_id,
+            "conversation_id": str(self.conversation_id),
             "conversation_start_time": time.time(),
             "conversation_end_time": None,
             "environment": robot_state.get_environment(),
             "messages": [],
         }
+
+        self._emit("conversation.started", {"conversation_id": str(self.conversation_id)})
 
         self._set_face("listening")
         self._set_activity("listening")
@@ -75,7 +81,9 @@ class ConversationManager:
             self._set_face("listening")
             self._set_activity("listening")
 
+            self._emit("audio.capture_start", {})
             result = self.get_sentence()
+            self._emit("audio.capture_end", {"has_speech": result is not None})
 
             if not result:
                 print("No speech detected for 6+ seconds - ending conversation")
@@ -97,15 +105,31 @@ class ConversationManager:
             self._set_activity("thinking")
 
             assistant_audio_path = self._get_assistant_audio_path(message_index)
-            response_text, audio_bytes = self.speaking.speak(
-                self.conversation_data,
-                save_path=assistant_audio_path,
-                on_audio_ready=lambda alignment: (
-                    self._set_face("speaking"),
-                    self._set_activity("speaking"),
-                    self._start_lip_sync(alignment),
-                ),
-            )
+
+            t_llm = time.monotonic()
+            self._emit("llm.started", {})
+            response_text = self.speaking.generate_response(self.conversation_data)
+            llm_dur = time.monotonic() - t_llm
+            self._emit("llm.completed", {"text": response_text, "duration_s": round(llm_dur, 2)})
+
+            t_tts = time.monotonic()
+            self._emit("tts.started", {})
+            audio_bytes, alignment = self.speaking.generate_audio(response_text)
+            tts_dur = time.monotonic() - t_tts
+            self._emit("tts.completed", {"duration_s": round(tts_dur, 2), "has_alignment": alignment is not None})
+
+            if assistant_audio_path:
+                with open(assistant_audio_path, 'wb') as f:
+                    f.write(audio_bytes)
+
+            self._set_face("speaking")
+            self._set_activity("speaking")
+            self._start_lip_sync(alignment)
+
+            self._emit("audio.playback_start", {})
+            self.speaking.play_audio(audio_bytes)
+            self._emit("audio.playback_end", {})
+
             self._stop_lip_sync()
 
             self.conversation_data["messages"].append({
@@ -119,9 +143,17 @@ class ConversationManager:
 
     def conversation_end(self):
         self.conversation_data["conversation_end_time"] = time.time()
+        duration = self.conversation_data["conversation_end_time"] - self.conversation_data["conversation_start_time"]
+        msg_count = len(self.conversation_data["messages"])
 
-        with open(self.save_dir / "conversation.json", "w") as f:
-            json.dump(self.conversation_data, f, indent=4)
+        try:
+            with open(self.save_dir / "conversation.json", "w") as f:
+                json.dump(self.conversation_data, f, indent=4, default=str)
+        except Exception as e:
+            print(f"[ConversationManager] Error saving conversation: {e}")
+            self._emit("brain.error", {"error": f"Failed to save conversation: {e}"})
+
+        self._emit("conversation.ended", {"duration_s": round(duration, 1), "message_count": msg_count})
 
         self._set_face("neutral")
         self._set_activity("idle")
@@ -132,7 +164,12 @@ class ConversationManager:
         if audio_data is None:
             return None
 
-        text = self.transcription.transcribe(audio_data)
+        self._emit("transcription.started", {})
+        t0 = time.monotonic()
+        text = self.transcription.transcribe(audio_data, language=transcription_language)
+        dur = time.monotonic() - t0
+        self._emit("transcription.completed", {"text": text or "", "duration_s": round(dur, 2)})
+
         if text:
             return (text, audio_data)
         return None

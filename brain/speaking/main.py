@@ -16,6 +16,10 @@ from brain.speaking.utils.audio_converter import mp3_to_wav_bytes
 
 load_dotenv()
 
+_VOICE_STABILITY = 0.75
+_VOICE_SIMILARITY_BOOST = 0.75
+
+
 class Speaking:
     def __init__(self):
         self.openai_api_key = os.getenv("OPENAI_API_KEY")
@@ -36,6 +40,14 @@ class Speaking:
         self.elevenlabs_client = ElevenLabs(api_key=self.elevenlabs_api_key)
         self.voice_id = voice_id
         self.speaking_model = speaking_model
+        try:
+            from elevenlabs import VoiceSettings
+            self._voice_settings = VoiceSettings(
+                stability=_VOICE_STABILITY,
+                similarity_boost=_VOICE_SIMILARITY_BOOST,
+            )
+        except ImportError:
+            self._voice_settings = None
 
     def speak(
         self,
@@ -101,11 +113,16 @@ class Speaking:
             on failure so playback still works without lip sync.
         """
         try:
-            response = self.elevenlabs_client.text_to_speech.convert_with_timestamps(
+            tts_kwargs = dict(
                 voice_id=self.voice_id,
                 text=text,
                 model_id=self.speaking_model,
                 output_format="mp3_44100_128",
+            )
+            if self._voice_settings is not None:
+                tts_kwargs["voice_settings"] = self._voice_settings
+            response = self.elevenlabs_client.text_to_speech.convert_with_timestamps(
+                **tts_kwargs,
             )
             audio_bytes = base64.b64decode(response.audio_base_64)
             alignment = None
@@ -118,11 +135,16 @@ class Speaking:
             return audio_bytes, alignment
         except Exception as e:
             print(f"[Speaking] convert_with_timestamps failed, falling back to convert: {e}")
-            audio_generator = self.elevenlabs_client.text_to_speech.convert(
+            fallback_kwargs = dict(
                 voice_id=self.voice_id,
                 text=text,
                 model_id=self.speaking_model,
                 output_format="mp3_44100_128",
+            )
+            if self._voice_settings is not None:
+                fallback_kwargs["voice_settings"] = self._voice_settings
+            audio_generator = self.elevenlabs_client.text_to_speech.convert(
+                **fallback_kwargs,
             )
             audio_bytes = b''.join(audio_generator)
             return audio_bytes, None

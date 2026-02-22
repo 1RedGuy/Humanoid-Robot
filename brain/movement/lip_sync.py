@@ -26,17 +26,34 @@ from brain.movement.servo_mixer import ServoMixer
 LIP_SYNC_LAYER = "lip_sync"
 LIP_SYNC_PRIORITY = 7
 
-VOWELS = set("aeiouyAEIOUY")
-BILABIALS = set("mbpMBP")
-FV_CHARS = set("fvFV")
+# Latin vowels (English, etc.)
+VOWELS_LATIN = set("aeiouyAEIOUY")
+# Cyrillic vowels (Bulgarian, etc.): а, е, и, о, у, ю, я, ъ (and uppercase)
+VOWELS_CYRILLIC = set("аеиоуюяъАЕИОУЮЯЪ")
+VOWELS = VOWELS_LATIN | VOWELS_CYRILLIC
+
+# Consonants that imply closed mouth (bilabials)
+BILABIALS = set("mbpMBP") | set("мбпМБП")
+# Consonants that imply FV viseme
+FV_CHARS = set("fvFV") | set("вфВФ")
 
 _CHAR_TO_VISEME = {
+    # Latin
     "a": "WIDE", "A": "WIDE",
     "e": "MEDIUM", "E": "MEDIUM",
     "i": "MEDIUM", "I": "MEDIUM",
     "o": "ROUND", "O": "ROUND",
     "u": "ROUND", "U": "ROUND",
     "y": "MEDIUM", "Y": "MEDIUM",
+    # Cyrillic (Bulgarian)
+    "а": "WIDE", "А": "WIDE",
+    "е": "MEDIUM", "Е": "MEDIUM",
+    "и": "MEDIUM", "И": "MEDIUM",
+    "о": "ROUND", "О": "ROUND",
+    "у": "ROUND", "У": "ROUND",
+    "ю": "ROUND", "Ю": "ROUND",
+    "я": "WIDE", "Я": "WIDE",   # /ja/ — open
+    "ъ": "MEDIUM", "Ъ": "MEDIUM",  # Bulgarian schwa
 }
 
 

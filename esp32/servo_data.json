@@ -174,7 +174,7 @@
       "EyebrowInnerLeft": 30,
       "EyebrowOuterRight": 160,
       "EyebrowOuterLeft": 180,
-      "LeftCheekUp": 270,
+      "LeftCheekUp": 60,
       "LeftCheekDown": 110,
       "RightCheekUp": 270,
       "RightCheekDown": 110,
@@ -187,7 +187,8 @@
       "EyeLidRightDown": 170,
       "EyeLidRightUp": 100,
       "EyeYAxis": 120,
-      "EyeXAxis": 170
+      "EyeXAxis": 170,
+      "EyebrowInnerRight": 200
     },
     "thinking": {
       "EyeLidLeftDown": 90,
