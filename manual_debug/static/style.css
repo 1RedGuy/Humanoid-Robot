@@ -156,6 +156,60 @@ button.primary:hover:not(:disabled) {
   min-width: 2em;
 }
 
+/* ---- Lip Sync Test ---- */
+#lip-sync-test {
+  padding: 14px 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+#lip-sync-test h2 {
+  margin-bottom: 8px;
+}
+
+.lip-sync-hint {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 12px;
+  max-width: 560px;
+}
+
+.lip-sync-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+#lip-sync-text {
+  min-width: 280px;
+  width: 100%;
+  max-width: 480px;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-family: var(--font);
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  resize: vertical;
+  outline: none;
+}
+
+#lip-sync-text:focus {
+  border-color: var(--accent);
+}
+
+#lip-sync-text::placeholder {
+  color: var(--text-dim);
+}
+
+.lip-sync-status {
+  font-size: 12px;
+  color: var(--text-dim);
+  align-self: center;
+}
+
 /* ---- Eyes actions ---- */
 #eyes-actions {
   padding: 14px 24px;

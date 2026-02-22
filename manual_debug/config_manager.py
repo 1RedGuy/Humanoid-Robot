@@ -15,9 +15,9 @@ SERVO_GROUPS = {
 LINKED_CONTROLS = {
     "Jaw": {
         "label": "Jaw Open/Close",
-        "slider_min": 35,
+        "slider_min": 25,
         "slider_max": 95,
-        "slider_default": 35,
+        "slider_default": 25,
         "servos": {
             "RightJaw": {"center": 95, "direction": -1},
             "LeftJaw": {"center": 85, "direction": 1},
@@ -124,6 +124,10 @@ class ConfigManager:
 
     def get_expression(self, name: str) -> Optional[Dict[str, float]]:
         return self.expressions.get(name)
+
+    def get_lip_sync_config(self) -> Dict[str, Any]:
+        """Return the lip_sync section from servo_data.json for TTS lip-sync test."""
+        return self._raw.get("lip_sync", {})
 
     def _flush(self):
         with open(self.config_path, "w") as f:

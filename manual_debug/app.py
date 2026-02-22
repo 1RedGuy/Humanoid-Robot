@@ -1,6 +1,9 @@
 import asyncio
 import json
+import os
 import random
+import threading
+import time
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -73,6 +76,9 @@ def create_app(
     class SaveExpressionBody(BaseModel):
         angles: Dict[str, float]
 
+    class LipSyncTestBody(BaseModel):
+        text: str
+
     # --- Routes -----------------------------------------------------------
 
     @app.get("/")
@@ -92,6 +98,16 @@ def create_app(
         try:
             port = serial.connect()
             _init_positions()
+            expr = cfg.get_expression("neutral")
+            if expr and serial.is_connected:
+                cmds = []
+                for servo_name, angle in expr.items():
+                    pin = cfg.pin_for(servo_name)
+                    if pin is not None:
+                        cmds.append({"servo_id": pin, "angle": float(angle), "duration": 0.8})
+                        positions[servo_name] = float(angle)
+                if cmds:
+                    serial.send_move_multiple(cmds)
             return {"connected": True, "port": port}
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
@@ -143,12 +159,22 @@ def create_app(
 
     @app.post("/api/calibrate")
     async def calibrate():
+        """Move all servos to neutral position (same as applying the neutral expression)."""
         _reject_if_idle()
         if not serial.is_connected:
             raise HTTPException(status_code=503, detail="Not connected to ESP32")
-        _init_positions()
-        serial.send_calibrate()
-        return {"ok": True, "angle": cfg.calibrate_angle}
+        expr = cfg.get_expression("neutral")
+        if not expr:
+            raise HTTPException(status_code=500, detail="No neutral expression defined in config")
+        cmds = []
+        for servo_name, angle in expr.items():
+            pin = cfg.pin_for(servo_name)
+            if pin is None:
+                continue
+            cmds.append({"servo_id": pin, "angle": float(angle), "duration": 0.4})
+            positions[servo_name] = float(angle)
+        serial.send_move_multiple(cmds)
+        return {"ok": True, "expression": "neutral"}
 
     @app.post("/api/stop")
     async def stop():
@@ -161,9 +187,13 @@ def create_app(
         _init_positions()
         return {"ok": True}
 
+    _EXPRESSION_HIDDEN = frozenset(("eyes_open", "eyes_closed"))
+
     @app.get("/api/expressions")
     async def get_expressions():
-        return {"expressions": cfg.expressions}
+        """Return expressions for the UI list; eyes_open and eyes_closed are excluded (they are in Eyes section)."""
+        filtered = {k: v for k, v in cfg.expressions.items() if k not in _EXPRESSION_HIDDEN}
+        return {"expressions": filtered}
 
     @app.post("/api/expressions/{name}")
     async def save_expression(name: str, body: SaveExpressionBody):
@@ -209,6 +239,102 @@ def create_app(
         cfg.reload()
         _init_positions()
         return _servo_response()
+
+    # --- Lip Sync Test (TTS + jaw/lip movement without full brain) ----------
+
+    @app.post("/api/lip-sync/test")
+    def lip_sync_test(body: LipSyncTestBody):
+        """Generate TTS with ElevenLabs (with timestamps), play audio, and drive jaw/lip servos in sync.
+        Requires ELEVENLABS_API_KEY in environment. Idle must be Off. Connect to ESP32 first."""
+        _reject_if_idle()
+        if not serial.is_connected:
+            raise HTTPException(
+                status_code=503,
+                detail="Not connected to ESP32. Connect first.",
+            )
+        if not body.text.strip():
+            raise HTTPException(status_code=400, detail="Text cannot be empty.")
+        if not os.getenv("ELEVENLABS_API_KEY"):
+            raise HTTPException(
+                status_code=503,
+                detail="ELEVENLABS_API_KEY not set. Add it to .env to test lip sync.",
+            )
+
+        from brain.speaking.main import Speaking
+        from brain.movement.lip_sync import build_viseme_timeline
+
+        lip_sync_config = cfg.get_lip_sync_config()
+        try:
+            speaking = Speaking()
+            audio_bytes, alignment = speaking.generate_audio(body.text.strip())
+        except Exception as e:
+            err_str = str(e).lower()
+            if "402" in err_str or "payment_required" in err_str or "paid_plan_required" in err_str:
+                raise HTTPException(
+                    status_code=402,
+                    detail=(
+                        "This voice requires a paid ElevenLabs plan. "
+                        "Free tier: set voice_id in brain/config.py to a default voice, e.g. "
+                        "Rachel: 21m00Tcm4TlvDq8ikWAM (see ElevenLabs dashboard → Default voices)."
+                    ),
+                )
+            raise HTTPException(status_code=502, detail=f"TTS failed: {e}")
+
+        if not audio_bytes:
+            raise HTTPException(status_code=502, detail="TTS returned no audio.")
+
+        if alignment is None:
+            speaking.play_audio(audio_bytes)
+            return {"ok": True, "lip_sync": False, "reason": "no alignment from TTS"}
+
+        if not lip_sync_config.get("enabled", True):
+            speaking.play_audio(audio_bytes)
+            return {"ok": True, "lip_sync": False, "reason": "lip_sync disabled in config"}
+
+        timeline = build_viseme_timeline(alignment, lip_sync_config)
+        transition = float(lip_sync_config.get("transition_duration", 0.05))
+        timeline_with_pins: List[tuple] = []
+        for ts, angles_dict in timeline:
+            cmds = []
+            for name, angle in angles_dict.items():
+                pin = cfg.pin_for(name)
+                if pin is not None:
+                    cmds.append({
+                        "servo_id": pin,
+                        "angle": round(float(angle), 1),
+                        "duration": transition,
+                    })
+            if cmds:
+                timeline_with_pins.append((ts, cmds))
+
+        def run_timeline():
+            origin = time.monotonic()
+            for ts, cmds in timeline_with_pins:
+                wait = ts - (time.monotonic() - origin)
+                if wait > 0:
+                    time.sleep(wait)
+                if not serial.is_connected:
+                    return
+                try:
+                    serial.send_move_multiple(cmds)
+                except Exception as e:
+                    print(f"[lip-sync-test] send error: {e}")
+
+        thread = threading.Thread(target=run_timeline, daemon=True)
+        thread.start()
+        speaking.play_audio(audio_bytes)
+        # Explicitly close mouth after playback
+        jaw_closed = lip_sync_config.get("jaw_closed", {})
+        close_cmds = []
+        for name in ("LeftJaw", "RightJaw"):
+            if name in jaw_closed:
+                pin = cfg.pin_for(name)
+                if pin is not None:
+                    close_cmds.append({"servo_id": pin, "angle": float(jaw_closed[name]), "duration": 0.1})
+                positions[name] = float(jaw_closed[name])
+        if close_cmds and serial.is_connected:
+            serial.send_move_multiple(close_cmds)
+        return {"ok": True, "lip_sync": True}
 
     # --- Eyes (open / closed / blink) ----------------------------------------
 

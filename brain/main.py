@@ -10,6 +10,7 @@ from .state import robot_state
 from .movement.servo_mixer import ServoMixer
 from .movement.face_controller import FaceController
 from .movement.behaviours.idle import IdleBehaviour
+from .movement.lip_sync import LipSyncController
 
 load_dotenv()
 
@@ -73,6 +74,17 @@ def _load_idle_config(config_path) -> tuple[dict, dict | None, dict, dict]:
         return {}, None, {}, {}
 
 
+def _load_lip_sync_config(config_path) -> dict:
+    """Load the lip_sync section from servo_data.json."""
+    try:
+        with open(config_path, "r") as f:
+            data = json.load(f)
+        return data.get("lip_sync", {})
+    except Exception as e:
+        print(f"[Brain] Could not load lip_sync config: {e}")
+        return {}
+
+
 class Brain:
     def __init__(self):
         self.wake_word_detection = WakeWordDetection()
@@ -81,6 +93,7 @@ class Brain:
         self.servo_controller = None
         self.mixer = None
         self.face_controller = None
+        self.lip_sync = None
         self.idle_behaviour = None
         self.conversation_manager = None
 
@@ -102,11 +115,16 @@ class Brain:
                 eyelid_closed=eyelid_closed,
                 idle_enabled_path=idle_enabled_path,
             )
+            lip_sync_config = _load_lip_sync_config(SERVO_DATA_PATH)
+            if lip_sync_config.get("enabled", True):
+                self.lip_sync = LipSyncController(self.mixer, lip_sync_config)
+
             self.face_controller.set_neutral(duration=1.0)
             robot_state.set_activity("idle")
 
         self.conversation_manager = ConversationManager(
             face_controller=self.face_controller,
+            lip_sync=self.lip_sync,
         )
 
         async with asyncio.TaskGroup() as tg:

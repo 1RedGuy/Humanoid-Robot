@@ -128,15 +128,38 @@
       "pin": 3,
       "wire_colors": ["unk", "unk", "unk"],
       "min_angle": 0,
-      "max_angle": 60,
+      "max_angle": 70,
       "inverted": false
     },
     "LeftJaw": {
       "pin": 0,
       "wire_colors": ["unk", "unk", "unk"],
-      "min_angle": 120,
+      "min_angle": 110,
       "max_angle": 180,
       "inverted": false
+    },
+    "UpperLip": {
+      "pin": null,
+      "wire_colors": ["unk", "unk", "unk"],
+      "min_angle": 0,
+      "max_angle": 180,
+      "inverted": false
+    }
+  },
+  "lip_sync": {
+    "enabled": true,
+    "transition_duration": 0.05,
+    "jaw_closed": {"LeftJaw": 110, "RightJaw": 70},
+    "jaw_open": {"LeftJaw": 152, "RightJaw": 28},
+    "upper_lip_neutral": 90,
+    "upper_lip_raised": 120,
+    "visemes": {
+      "CLOSED": {"jaw_openness": 0.0, "lip_raise": 0.0},
+      "SMALL":  {"jaw_openness": 0.15, "lip_raise": 0.0},
+      "MEDIUM": {"jaw_openness": 0.4, "lip_raise": 0.0},
+      "WIDE":   {"jaw_openness": 0.65, "lip_raise": 0.0},
+      "ROUND":  {"jaw_openness": 0.35, "lip_raise": 0.3},
+      "FV":     {"jaw_openness": 0.1, "lip_raise": 0.7}
     }
   },
   "expressions": {
@@ -154,7 +177,9 @@
       "LeftCheekUp": 270,
       "LeftCheekDown": 110,
       "RightCheekUp": 270,
-      "RightCheekDown": 110
+      "RightCheekDown": 110,
+      "LeftJaw": 110,
+      "RightJaw": 70
     },
     "listening": {
       "EyeLidLeftDown": 90,

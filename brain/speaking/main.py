@@ -1,5 +1,8 @@
+import base64
 import os
 import openai
+from typing import Callable
+
 from brain.config import speaking_model, thinking_model, voice_id, SpeakingPrompt
 import time
 from elevenlabs.client import ElevenLabs
@@ -38,7 +41,7 @@ class Speaking:
         self,
         conversation_data: dict,
         save_path: Path | None = None,
-        on_audio_ready: callable | None = None,
+        on_audio_ready: Callable | None = None,
     ) -> tuple[str, bytes]:
         """
         Generate response, convert to audio, and play it.
@@ -46,22 +49,22 @@ class Speaking:
         Args:
             conversation_data: Conversation history and environment.
             save_path: Optional path to save the audio file.
-            on_audio_ready: Optional callback invoked right before playback
-                            starts (e.g. to switch the face to "speaking").
+            on_audio_ready: Optional callback ``(alignment_dict_or_None) -> ...``
+                            invoked right before playback starts.
 
         Returns:
             (response_text, audio_bytes)
         """
         response_text = self.generate_response(conversation_data)
 
-        audio_bytes = self.generate_audio(response_text)
+        audio_bytes, alignment = self.generate_audio(response_text)
 
         if save_path:
             with open(save_path, 'wb') as f:
                 f.write(audio_bytes)
 
         if on_audio_ready:
-            on_audio_ready()
+            on_audio_ready(alignment)
 
         self.play_audio(audio_bytes)
 
@@ -88,15 +91,41 @@ class Speaking:
 
         return response.choices[0].message.content
 
-    def generate_audio(self, text: str):
-        audio_generator = self.elevenlabs_client.text_to_speech.convert(
-            voice_id=self.voice_id,
-            text=text,
-            model_id=self.speaking_model,
-            output_format="mp3_44100_128"
-        )
-        audio_bytes = b''.join(audio_generator)
-        return audio_bytes
+    def generate_audio(self, text: str) -> tuple[bytes, dict | None]:
+        """Generate TTS audio with character-level timing for lip sync.
+
+        Returns:
+            (mp3_bytes, alignment_dict) where alignment_dict has keys
+            ``characters``, ``character_start_times_seconds``, and
+            ``character_end_times_seconds``.  Returns ``(bytes, None)``
+            on failure so playback still works without lip sync.
+        """
+        try:
+            response = self.elevenlabs_client.text_to_speech.convert_with_timestamps(
+                voice_id=self.voice_id,
+                text=text,
+                model_id=self.speaking_model,
+                output_format="mp3_44100_128",
+            )
+            audio_bytes = base64.b64decode(response.audio_base_64)
+            alignment = None
+            if response.alignment is not None:
+                alignment = {
+                    "characters": list(response.alignment.characters),
+                    "character_start_times_seconds": list(response.alignment.character_start_times_seconds),
+                    "character_end_times_seconds": list(response.alignment.character_end_times_seconds),
+                }
+            return audio_bytes, alignment
+        except Exception as e:
+            print(f"[Speaking] convert_with_timestamps failed, falling back to convert: {e}")
+            audio_generator = self.elevenlabs_client.text_to_speech.convert(
+                voice_id=self.voice_id,
+                text=text,
+                model_id=self.speaking_model,
+                output_format="mp3_44100_128",
+            )
+            audio_bytes = b''.join(audio_generator)
+            return audio_bytes, None
 
     def play_audio(self, audio_bytes: bytes):
         """

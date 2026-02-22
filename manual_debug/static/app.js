@@ -4,12 +4,14 @@ let positions = {}; // name -> current angle
 let connected = false;
 
 /* ── helpers ── */
-async function api(method, path, body) {
-  const opts = { method, headers: {} };
+async function api(method, path, body, options = {}) {
+  const opts = { method, headers: options.headers || {} };
   if (body !== undefined) {
     opts.headers["Content-Type"] = "application/json";
     opts.body = JSON.stringify(body);
   }
+  if (options.timeoutMs != null)
+    opts.signal = AbortSignal.timeout(options.timeoutMs);
   const res = await fetch(path, opts);
   const text = await res.text();
   let data;
@@ -52,6 +54,9 @@ const btnRandomLook = document.getElementById("btn-random-look");
 const btnBlinkLeft = document.getElementById("btn-blink-left");
 const btnBlinkRight = document.getElementById("btn-blink-right");
 const btnBlinkBoth = document.getElementById("btn-blink-both");
+const btnLipSyncPlay = document.getElementById("btn-lip-sync-play");
+const lipSyncTextEl = document.getElementById("lip-sync-text");
+const lipSyncStatusEl = document.getElementById("lip-sync-status");
 
 function setConnected(state, port) {
   connected = state;
@@ -62,6 +67,7 @@ function setConnected(state, port) {
   btnConnect.disabled = state;
   btnDisconnect.disabled = !state;
   btnStop.disabled = false;
+  if (btnLipSyncPlay) btnLipSyncPlay.disabled = !state || idleRunning;
   updateIdleUI(idleRunning);
 }
 
@@ -82,6 +88,7 @@ function updateIdleUI(running) {
   if (btnBlinkLeft) btnBlinkLeft.disabled = !connected || locked;
   if (btnBlinkRight) btnBlinkRight.disabled = !connected || locked;
   if (btnBlinkBoth) btnBlinkBoth.disabled = !connected || locked;
+  if (btnLipSyncPlay) btnLipSyncPlay.disabled = !connected || locked;
   servoGroupsEl?.querySelectorAll("input[type=range]").forEach((el) => {
     el.disabled = locked;
   });
@@ -183,6 +190,28 @@ if (btnBlinkRight) {
 }
 if (btnBlinkBoth) {
   btnBlinkBoth.addEventListener("click", () => eyesAction("/api/eyes/blink-both", btnBlinkBoth));
+}
+
+/* ── lip sync test ── */
+if (btnLipSyncPlay) {
+  btnLipSyncPlay.addEventListener("click", async () => {
+    const text = lipSyncTextEl?.value?.trim() || "";
+    if (!text) {
+      alert("Enter some text to speak.");
+      return;
+    }
+    btnLipSyncPlay.disabled = true;
+    if (lipSyncStatusEl) lipSyncStatusEl.textContent = "Playing…";
+    try {
+      const data = await api("POST", "/api/lip-sync/test", { text }, { timeoutMs: 90000 });
+      if (lipSyncStatusEl) lipSyncStatusEl.textContent = data.lip_sync ? "Done." : (data.reason || "Done.");
+    } catch (e) {
+      alert("Lip sync test failed: " + e.message);
+      if (lipSyncStatusEl) lipSyncStatusEl.textContent = "";
+    } finally {
+      btnLipSyncPlay.disabled = !connected || idleRunning;
+    }
+  });
 }
 
 /* ── servo sliders ── */

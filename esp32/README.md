@@ -35,6 +35,9 @@ bash esp32/deploy.sh
 ```
 That uploads the PCA9685 library, main.py, servo_driver.py, and servo_data.json. For code-only changes, just run `bash esp32/deploy.sh` (no flash needed).
 
+**Cheeks / eyebrows (or other servos) don’t go to neutral on start**  
+On power-up the ESP32 applies **neutral** from `servo_data.json` (every servo listed in `expressions.neutral`). If you added servos to neutral (e.g. cheeks, eyebrows) but didn’t redeploy, the ESP32 still has the old file. Run `bash esp32/deploy.sh` so the device gets the updated `servo_data.json`; after the next reset, all servos in neutral will move to their neutral pose.
+
 **Servos don't move**  
 1. In the manual_debug UI, click Connect — it must show "Connected (port)". When you move a slider, the backend terminal should show e.g. `[set-angles] sending 2 servos: ...`. If you never see that, the backend isn't talking to the ESP32 (wrong port or not connected).  
 2. To see ESP32-side errors: stop the backend, open Thonny, connect to the ESP32, press Reset. In the Thonny shell you should see either **"ServoDriver init failed: ..."** (fix: missing `lib/pca9685/pca9685.py`, missing `servo_data.json`, or I2C/pins) or **"Loaded servo config"** and **"ESP32 Servo Controller Ready"**.  

@@ -33,6 +33,17 @@
       </span>
     </section>
 
+    <!-- Lip Sync Test -->
+    <section id="lip-sync-test">
+      <h2>Lip Sync Test</h2>
+      <p class="lip-sync-hint">Enter text, then Play. TTS is sent to ElevenLabs; audio plays and jaw/lip move in sync. Requires <strong>Idle Off</strong>, <strong>ESP32 connected</strong>, and <strong>ELEVENLABS_API_KEY</strong> in .env.</p>
+      <div class="lip-sync-controls">
+        <textarea id="lip-sync-text" rows="3" placeholder="e.g. Hello world"></textarea>
+        <button id="btn-lip-sync-play" class="ctrl-btn" disabled>Play with lip sync</button>
+        <span id="lip-sync-status" class="lip-sync-status"></span>
+      </div>
+    </section>
+
     <!-- Eyes quick actions -->
     <section id="eyes-actions">
       <h2>Eyes</h2>

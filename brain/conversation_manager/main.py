@@ -12,14 +12,20 @@ from brain.audio.capture.main import AudioCapture
 from brain.speaking.transcription.main import Transcription
 from brain.speaking.main import Speaking
 from brain.movement.face_controller import FaceController
+from brain.movement.lip_sync import LipSyncController
 
 
 class ConversationManager:
-    def __init__(self, face_controller: Optional[FaceController] = None):
+    def __init__(
+        self,
+        face_controller: Optional[FaceController] = None,
+        lip_sync: Optional[LipSyncController] = None,
+    ):
         self.audio_capture = AudioCapture()
         self.transcription = Transcription()
         self.speaking = Speaking()
         self.face_controller = face_controller
+        self.lip_sync = lip_sync
         self.conversation_id = None
         self.save_dir = None
 
@@ -31,6 +37,14 @@ class ConversationManager:
 
     def _set_activity(self, activity: str):
         robot_state.set_activity(activity)
+
+    def _start_lip_sync(self, alignment: dict | None):
+        if self.lip_sync and alignment:
+            self.lip_sync.start(alignment)
+
+    def _stop_lip_sync(self):
+        if self.lip_sync:
+            self.lip_sync.stop()
 
     # ── conversation flow (blocking, runs in worker thread) ──
 
@@ -86,11 +100,13 @@ class ConversationManager:
             response_text, audio_bytes = self.speaking.speak(
                 self.conversation_data,
                 save_path=assistant_audio_path,
-                on_audio_ready=lambda: (
+                on_audio_ready=lambda alignment: (
                     self._set_face("speaking"),
                     self._set_activity("speaking"),
+                    self._start_lip_sync(alignment),
                 ),
             )
+            self._stop_lip_sync()
 
             self.conversation_data["messages"].append({
                 "role": "assistant",

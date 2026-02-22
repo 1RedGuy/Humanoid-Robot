@@ -1,5 +1,12 @@
 import argparse
+from pathlib import Path
+
+from dotenv import load_dotenv
 import uvicorn
+
+# Load .env from manual_debug dir so ELEVENLABS_API_KEY is available for lip-sync test
+load_dotenv(Path(__file__).resolve().parent / ".env")
+
 from .app import create_app
 
 
