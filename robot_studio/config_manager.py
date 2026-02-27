@@ -7,7 +7,8 @@ SERVO_GROUPS = {
     "Eyes": ["EyeLidLeftDown", "EyeLidLeftUp", "EyeLidRightDown", "EyeLidRightUp", "EyeYAxis", "EyeXAxis"],
     "Eyebrows": ["EyebrowInnerRight", "EyebrowInnerLeft", "EyebrowOuterRight", "EyebrowOuterLeft"],
     "Cheeks": ["RightCheekUp", "RightCheekDown", "LeftCheekUp", "LeftCheekDown"],
-    "Jaw": ["LeftJaw", "RightJaw"],
+    "Mouth": ["LeftJaw", "RightJaw", "UpperLip"],
+    "Neck": ["NeckYaw", "NeckPitch"],
 }
 
 # Single slider controls multiple servos in sync.
@@ -21,6 +22,24 @@ LINKED_CONTROLS = {
         "servos": {
             "RightJaw": {"center": 95, "direction": -1},
             "LeftJaw": {"center": 85, "direction": 1},
+        },
+    },
+    "NeckYaw": {
+        "label": "Neck Turn (Left/Right)",
+        "slider_min": 0,
+        "slider_max": 360,
+        "slider_default": 180,
+        "servos": {
+            "NeckYaw": {"center": 180, "direction": 1},
+        },
+    },
+    "NeckPitch": {
+        "label": "Neck Tilt (Up/Down)",
+        "slider_min": 160,
+        "slider_max": 230,
+        "slider_default": 200,
+        "servos": {
+            "NeckPitch": {"center": 200, "direction": 1},
         },
     },
 }

@@ -139,10 +139,29 @@
       "inverted": false
     },
     "UpperLip": {
-      "pin": null,
+      "driver": "gpio",
+      "pin": 27,
       "wire_colors": ["unk", "unk", "unk"],
       "min_angle": 0,
-      "max_angle": 180,
+      "max_angle": 360,
+      "inverted": false
+    },
+    "NeckYaw": {
+      "driver": "gpio",
+      "pin": 26,
+      "wire_colors": ["unk", "unk", "unk"],
+      "min_angle": 0,
+      "max_angle": 360,
+      "neutral_angle": 180,
+      "inverted": false
+    },
+    "NeckPitch": {
+      "driver": "gpio",
+      "pin": 25,
+      "wire_colors": ["unk", "unk", "unk"],
+      "min_angle": 160,
+      "max_angle": 230,
+      "neutral_angle": 200,
       "inverted": false
     }
   },
@@ -179,7 +198,9 @@
       "RightCheekUp": 270,
       "RightCheekDown": 110,
       "LeftJaw": 110,
-      "RightJaw": 70
+      "RightJaw": 70,
+      "NeckYaw": 180,
+      "NeckPitch": 200
     },
     "listening": {
       "EyeLidLeftDown": 90,
@@ -188,7 +209,9 @@
       "EyeLidRightUp": 100,
       "EyeYAxis": 120,
       "EyeXAxis": 170,
-      "EyebrowInnerRight": 200
+      "EyebrowInnerRight": 200,
+      "NeckYaw": 180,
+      "NeckPitch": 200
     },
     "thinking": {
       "EyeLidLeftDown": 90,
@@ -196,7 +219,9 @@
       "EyeLidRightDown": 170,
       "EyeLidRightUp": 100,
       "EyeYAxis": 120,
-      "EyeXAxis": 170
+      "EyeXAxis": 170,
+      "NeckYaw": 180,
+      "NeckPitch": 200
     },
     "speaking": {
       "EyeLidLeftDown": 90,
@@ -204,7 +229,9 @@
       "EyeLidRightDown": 170,
       "EyeLidRightUp": 100,
       "EyeYAxis": 120,
-      "EyeXAxis": 170
+      "EyeXAxis": 170,
+      "NeckYaw": 180,
+      "NeckPitch": 200
     },
     "eyes_open": {
       "EyeLidLeftDown": 90,
