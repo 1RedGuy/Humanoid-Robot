@@ -35,6 +35,12 @@ htmlcov/
 .tox/
 .hypothesis/
 
+# Node
+node_modules/
+
+# Claude Code
+.claude/
+
 # IDEs
 .vscode/
 .idea/
@@ -54,3 +60,4 @@ Thumbs.db
 
 old_code/
 to-do.txt
+website/
