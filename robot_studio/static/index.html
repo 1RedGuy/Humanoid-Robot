@@ -64,8 +64,25 @@
           <button id="btn-blink-left" class="eyes-btn" disabled>Left eye blink</button>
           <button id="btn-blink-right" class="eyes-btn" disabled>Right eye blink</button>
           <button id="btn-blink-both" class="eyes-btn" disabled>Both eyes blink</button>
+          <button id="btn-wink-right" class="eyes-btn" disabled>Wink right eye</button>
+          <button id="btn-wink-left" class="eyes-btn" disabled>Wink left eye</button>
         </div>
         <p class="eyes-hint" id="eyes-hint">When <strong>Idle</strong> is On (above), blink and random gaze run here; servos and expressions are locked until you turn Idle Off.</p>
+      </section>
+
+      <!-- Neck quick actions -->
+      <section id="neck-actions">
+        <h2>Neck</h2>
+        <div class="eyes-buttons">
+          <button id="btn-neck-center" class="eyes-btn" disabled>Center</button>
+          <button id="btn-neck-left" class="eyes-btn" disabled>Look left</button>
+          <button id="btn-neck-right" class="eyes-btn" disabled>Look right</button>
+          <button id="btn-neck-up" class="eyes-btn" disabled>Look up</button>
+          <button id="btn-neck-down" class="eyes-btn" disabled>Look down</button>
+          <button id="btn-neck-nod" class="eyes-btn" disabled>Nod</button>
+          <button id="btn-neck-shake" class="eyes-btn" disabled>Shake</button>
+        </div>
+        <p class="eyes-hint">Quick head movements for calibration and testing. Requires <strong>Idle Off</strong> and <strong>ESP32 connected</strong>.</p>
       </section>
 
       <main>
@@ -105,6 +122,12 @@
         <div class="expression-indicator-wrap">
           <span class="state-label">Expression:</span>
           <span id="expression-badge" class="expression-badge">neutral</span>
+        </div>
+        <div class="person-tracking-wrap">
+          <span class="state-label">Person Tracking:</span>
+          <button id="btn-tracking-on" class="ctrl-btn idle-btn" type="button">On</button>
+          <button id="btn-tracking-off" class="ctrl-btn idle-btn" type="button">Off</button>
+          <span id="tracking-status" class="idle-status"></span>
         </div>
       </section>
 

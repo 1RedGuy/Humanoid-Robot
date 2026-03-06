@@ -12,7 +12,9 @@ from .movement.servo_mixer import ServoMixer
 from .movement.face_controller import FaceController
 from .movement.neck_controller import NeckController
 from .movement.behaviours.idle import IdleBehaviour
+from .movement.behaviours.speaking_gaze import SpeakingGaze
 from .movement.lip_sync import LipSyncController
+from .vision.person_tracker.main import PersonTracker
 
 load_dotenv()
 
@@ -54,6 +56,14 @@ def _load_idle_config(config_path) -> tuple[dict, dict | None, dict, dict, dict]
             "gaze_hold_max": float(raw.get("gaze_hold_max", 3.5)),
             "gaze_move_duration": float(raw.get("gaze_move_duration", 0.25)),
             "gaze_return_duration": float(raw.get("gaze_return_duration", 0.3)),
+            # ── new saccade / realism params ───────────────────────────
+            "gaze_saccade_duration": float(raw.get("gaze_saccade_duration", 0.10)),
+            "gaze_x_bias": float(raw.get("gaze_x_bias", 0.70)),
+            "double_blink_chance": float(raw.get("double_blink_chance", 0.15)),
+            "speaking_blink_interval_min": float(raw.get("speaking_blink_interval_min", 3.0)),
+            "speaking_blink_interval_max": float(raw.get("speaking_blink_interval_max", 7.0)),
+            "thinking_gaze_chance": float(raw.get("thinking_gaze_chance", 0.45)),
+            "neck_coord_threshold": float(raw.get("neck_coord_threshold", 0.60)),
         }
         neutral = data.get("expressions", {}).get("neutral", {})
         gaze_center = None
@@ -110,6 +120,8 @@ class Brain:
         self.neck_controller = None
         self.lip_sync = None
         self.idle_behaviour = None
+        self.speaking_gaze = None
+        self.person_tracker = None
         self.conversation_manager = None
 
     async def run(self):
@@ -124,6 +136,7 @@ class Brain:
             self.mixer = ServoMixer(self.servo_controller, name_to_pin, on_event=self.on_event)
             self.face_controller = FaceController(self.mixer, SERVO_DATA_PATH)
             self.neck_controller = NeckController(self.mixer, SERVO_DATA_PATH)
+
             idle_config, gaze_center, gaze_limits, eyelid_closed, eyelid_open = _load_idle_config(SERVO_DATA_PATH)
             idle_enabled_path = SERVO_DATA_PATH.parent.parent / "brain" / "data" / "idle_enabled.json"
             self.idle_behaviour = IdleBehaviour(
@@ -135,7 +148,20 @@ class Brain:
                 eyelid_open=eyelid_open,
                 idle_enabled_path=idle_enabled_path,
                 on_event=self.on_event,
+                neck_controller=self.neck_controller,
             )
+
+            self.speaking_gaze = SpeakingGaze(self.mixer, SERVO_DATA_PATH)
+
+            person_tracking_enabled_path = (
+                SERVO_DATA_PATH.parent.parent / "brain" / "data" / "person_tracking_enabled.json"
+            )
+            self.person_tracker = PersonTracker(
+                self.mixer,
+                SERVO_DATA_PATH,
+                person_tracking_enabled_path,
+            )
+
             lip_sync_config = _load_lip_sync_config(SERVO_DATA_PATH)
             if lip_sync_config.get("enabled", True):
                 self.lip_sync = LipSyncController(self.mixer, lip_sync_config)
@@ -147,6 +173,7 @@ class Brain:
             face_controller=self.face_controller,
             lip_sync=self.lip_sync,
             on_event=self.on_event,
+            neck_controller=self.neck_controller,
         )
 
         async with asyncio.TaskGroup() as tg:
@@ -156,19 +183,26 @@ class Brain:
                 tg.create_task(self.idle_behaviour.run())
             if self.neck_controller:
                 tg.create_task(self.neck_controller.run())
+            if self.speaking_gaze:
+                tg.create_task(self.speaking_gaze.run())
+            if self.person_tracker:
+                tg.create_task(self.person_tracker.run())
             tg.create_task(self._wake_word_loop())
 
     async def _wink_right_eye(self):
         """Quick right-eye wink to acknowledge wake word detection."""
-        if not self.mixer:
-            return
-        self.mixer.set_layer("wink", 10, {
-            "EyeLidRightDown": 130,
-            "EyeLidRightUp": 150,
-        }, duration=0.08)
-        await asyncio.sleep(0.2)
-        self.mixer.release_layer("wink", duration=0.08)
-        await asyncio.sleep(0.1)
+        if self.face_controller:
+            # Delegate to FaceController — reads correct calibrated angles from config
+            await asyncio.to_thread(self.face_controller.wink_right)
+        elif self.mixer:
+            # Fallback with placeholder angles when no face controller
+            self.mixer.set_layer("wink", 10, {
+                "EyeLidRightDown": 130,
+                "EyeLidRightUp": 150,
+            }, duration=0.08)
+            await asyncio.sleep(0.2)
+            self.mixer.release_layer("wink", duration=0.08)
+            await asyncio.sleep(0.1)
 
     async def _wake_word_loop(self):
         """Continuously listen for wake word and start conversations."""

@@ -6,18 +6,18 @@ import numpy as np
 import pyaudio
 import pvporcupine
 
-from brain.config import WakeWordDetectionKeywords
+from brain.config import WAKE_WORD_MODEL_PATH, WAKE_WORD_NAME
 
 
 class WakeWordDetection:
     def __init__(self, on_event: Optional[Callable] = None):
         self._emit = on_event or (lambda t, d: None)
-        self.porcupine = pvporcupine.create(
-            access_key=os.getenv("PORCUPINE_API_KEY"),
-            keywords=WakeWordDetectionKeywords,
-        )
         self.audio = None
         self.stream = None
+        self.porcupine = pvporcupine.create(
+            access_key=os.getenv("PORCUPINE_API_KEY"),
+            keyword_paths=[str(WAKE_WORD_MODEL_PATH)],
+        )
 
     def _run_blocking(self) -> bool:
         self._emit("wake_word.listening", {})
@@ -42,8 +42,7 @@ class WakeWordDetection:
                     keyword_index = self.porcupine.process(pcm_array)
 
                     if keyword_index >= 0:
-                        keyword = WakeWordDetectionKeywords[keyword_index] if keyword_index < len(WakeWordDetectionKeywords) else "unknown"
-                        self._emit("wake_word.detected", {"keyword": keyword})
+                        self._emit("wake_word.detected", {"keyword": WAKE_WORD_NAME})
                         return True
 
                 except Exception as e:

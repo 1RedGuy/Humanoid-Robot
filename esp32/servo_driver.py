@@ -19,10 +19,16 @@ except ImportError:
 class ServoDriver:
     def __init__(self, config_file="servo_data.json"):
         """Initialize I2C and PCA9685, load servo configuration."""
-        # ESP32 I2C pins (adjust if needed)
-        # PCA9685Driver creates its own I2C bus, so we pass pin numbers
         self.pca = PCA9685Driver(i2c_channel=0, scl_pin=22, sda_pin=21, i2c_freq=400000)
         self.pca.set_pwm_frequency(50)  # 50Hz for servos
+
+        # I2C diagnostic: scan bus and verify PCA writes face channels correctly
+        try:
+            devs = self.pca.i2c.scan()
+            print("I2C scan:", [hex(d) for d in devs])
+        except Exception as e:
+            print("I2C scan error:", e)
+        self._pca_readback_test()
 
         # GPIO PWM instances for direct-wired servos {gpio_pin: PWM}
         self.gpio_pwm = {}
@@ -31,16 +37,37 @@ class ServoDriver:
         # Load full config (global + servos + expressions)
         self.servo_config, self.global_config, self.neutral_expression = self._load_servo_config(config_file)
 
-        # Initialise GPIO PWM objects for servos with driver=="gpio"
-        self._init_gpio_servos()
-
         # Store current positions
         self.current_positions = {}
 
-        # Init: apply neutral only (no separate calibration step)
+        # Apply neutral to PCA servos BEFORE initialising GPIO/LEDC PWM.
         if self.global_config.get("calibrate_on_init", False) and self.neutral_expression:
             self._apply_neutral()
+
+        # Init GPIO AFTER PCA neutral is applied so I2C is undisturbed.
+        self._init_gpio_servos()
         
+    def _pca_readback_test(self):
+        """Write 90° to ch0 (jaw) and ch1 (face), read back registers.
+        If both match → PCA writes are fine, issue is hardware downstream.
+        If face channel mismatches → I2C/PCA fault on that channel.
+        """
+        period_ms = 20.0
+        for ch in (0, 1):
+            angle = 90.0
+            on_time_ms = 1.0 + (angle / 360.0) * 2.0
+            expected = round(on_time_ms * 4095 / period_ms)
+            try:
+                self.pca.servo_set_angle(ch, angle)
+                off_l = self.pca._read_reg(ch * 4 + 8)
+                off_h = self.pca._read_reg(ch * 4 + 9)
+                actual = off_l | ((off_h & 0x0F) << 8)
+                ok = abs(actual - expected) <= 1
+                print("PCA ch%d: wrote 90deg => reg=%d (expect %d) %s" % (
+                    ch, actual, expected, "OK" if ok else "MISMATCH"))
+            except Exception as e:
+                print("PCA ch%d readback error: %s" % (ch, e))
+
     def _init_gpio_servos(self):
         """Create machine.PWM objects for servos wired directly to GPIO pins."""
         for name, cfg in self.servo_config.items():
@@ -49,29 +76,40 @@ class ServoDriver:
                 if pin is None:
                     continue
                 gpio_pin = int(pin)
+                freq = int(cfg.get("freq", 50))
                 try:
-                    self.gpio_pwm[gpio_pin] = PWM(Pin(gpio_pin), freq=50)
+                    self.gpio_pwm[gpio_pin] = PWM(Pin(gpio_pin), freq=freq)
                     self.gpio_pins.add(gpio_pin)
-                    print(f"GPIO servo '{name}' on pin {gpio_pin}")
+                    print(f"GPIO servo '{name}' on pin {gpio_pin} @ {freq}Hz")
                 except Exception as e:
                     print(f"GPIO servo '{name}' pin {gpio_pin} init failed: {e}")
 
-    def _angle_to_duty_u16(self, angle):
-        """Convert servo angle (degrees) to 16-bit duty cycle for 50Hz PWM.
+    def _angle_to_duty_u16(self, angle, min_pulse_us, max_pulse_us, period_us, min_angle, max_angle):
+        """Convert servo angle to 16-bit duty cycle.
 
-        Uses the same 1ms–2ms pulse mapping as the PCA9685 driver:
-          0°   → 1ms pulse  (5% of 20ms period)
-          180° → 2ms pulse  (10% of 20ms period)
+        Maps angle linearly from [min_angle, max_angle] to [min_pulse_us, max_pulse_us],
+        then converts to a duty_u16 value using the actual PWM period.
         """
-        pulse_us = 1000.0 + (angle / 180.0) * 1000.0   # 1000–2000 µs
-        return int(pulse_us / 20000.0 * 65535)
+        angle_range = max_angle - min_angle if max_angle != min_angle else 180.0
+        t = (angle - min_angle) / angle_range
+        t = max(0.0, min(1.0, t))
+        pulse_us = min_pulse_us + t * (max_pulse_us - min_pulse_us)
+        return int(pulse_us / period_us * 65535)
 
     def _set_servo_angle_hw(self, servo_id, physical_angle):
         """Route a servo angle command to PCA9685 or GPIO PWM."""
         if servo_id in self.gpio_pins:
             pwm = self.gpio_pwm.get(servo_id)
             if pwm is not None:
-                pwm.duty_u16(self._angle_to_duty_u16(physical_angle))
+                cfg = self.pin_to_config.get(servo_id, {})
+                min_pulse = cfg.get("min_pulse_us", 1000.0)
+                max_pulse = cfg.get("max_pulse_us", 2000.0)
+                freq = int(cfg.get("freq", 50))
+                period_us = 1_000_000.0 / freq
+                min_angle = cfg.get("min_angle", 0)
+                max_angle = cfg.get("max_angle", 180)
+                pwm.duty_u16(self._angle_to_duty_u16(
+                    physical_angle, min_pulse, max_pulse, period_us, min_angle, max_angle))
         else:
             self.pca.servo_set_angle(servo_id, physical_angle)
 

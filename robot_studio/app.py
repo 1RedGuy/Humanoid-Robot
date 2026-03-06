@@ -21,6 +21,7 @@ STATIC_DIR = Path(__file__).parent / "static"
 PROJECT_ROOT = Path(__file__).parent.parent
 DEFAULT_CONFIG = PROJECT_ROOT / "esp32" / "servo_data.json"
 IDLE_ENABLED_PATH = PROJECT_ROOT / "brain" / "data" / "idle_enabled.json"
+PERSON_TRACKING_PATH = PROJECT_ROOT / "brain" / "data" / "person_tracking_enabled.json"
 
 
 def create_app(
@@ -193,7 +194,9 @@ def create_app(
         _init_positions()
         return {"ok": True}
 
-    _EXPRESSION_HIDDEN = frozenset(("eyes_open", "eyes_closed"))
+    # wink_right / wink_left are motion sequences — exclude from static expr list;
+    # they are testable via the dedicated /api/eyes/wink-* endpoints instead.
+    _EXPRESSION_HIDDEN = frozenset(("eyes_open", "eyes_closed", "wink_right", "wink_left"))
 
     @app.get("/api/expressions")
     async def get_expressions():
@@ -512,6 +515,208 @@ def create_app(
         for _n, _p, a in open_:
             positions[_n] = a
         return {"ok": True}
+
+    # ── wink (one eye close → hold → open) ───────────────────────────────────
+
+    _WINK_CLOSE_DURATION = 0.06
+    _WINK_HOLD_DURATION = 0.14
+    _WINK_OPEN_DURATION = 0.08
+
+    @app.post("/api/eyes/wink-right")
+    async def eyes_wink_right():
+        """Close right eye, hold briefly, then reopen — tests the wink animation."""
+        _reject_if_idle()
+        if not serial.is_connected:
+            raise HTTPException(status_code=503, detail="Not connected to ESP32")
+        # Use wink_right expression if available, else filter right eye from eyes_closed
+        closed = _eyes_angles("wink_right")
+        if not closed:
+            closed = [(n, p, a) for n, p, a in _eyes_angles("eyes_closed") if "Right" in n]
+        open_ = [(n, p, a) for n, p, a in _eyes_angles("eyes_open") if "Right" in n]
+        if not closed:
+            raise HTTPException(status_code=500, detail="wink_right / eyes_closed right eye not configured")
+        serial.send_move_multiple([{"servo_id": p, "angle": a, "duration": _WINK_CLOSE_DURATION} for _n, p, a in closed])
+        await asyncio.sleep(_WINK_CLOSE_DURATION + _WINK_HOLD_DURATION)
+        if open_:
+            serial.send_set_angles([{"servo_id": p, "angle": a} for _n, p, a in open_])
+            for _n, _p, a in open_:
+                positions[_n] = a
+        await asyncio.sleep(_WINK_OPEN_DURATION + 0.05)
+        return {"ok": True}
+
+    @app.post("/api/eyes/wink-left")
+    async def eyes_wink_left():
+        """Close left eye, hold briefly, then reopen — tests the wink animation."""
+        _reject_if_idle()
+        if not serial.is_connected:
+            raise HTTPException(status_code=503, detail="Not connected to ESP32")
+        closed = _eyes_angles("wink_left")
+        if not closed:
+            closed = [(n, p, a) for n, p, a in _eyes_angles("eyes_closed") if "Left" in n]
+        open_ = [(n, p, a) for n, p, a in _eyes_angles("eyes_open") if "Left" in n]
+        if not closed:
+            raise HTTPException(status_code=500, detail="wink_left / eyes_closed left eye not configured")
+        serial.send_move_multiple([{"servo_id": p, "angle": a, "duration": _WINK_CLOSE_DURATION} for _n, p, a in closed])
+        await asyncio.sleep(_WINK_CLOSE_DURATION + _WINK_HOLD_DURATION)
+        if open_:
+            serial.send_set_angles([{"servo_id": p, "angle": a} for _n, p, a in open_])
+            for _n, _p, a in open_:
+                positions[_n] = a
+        await asyncio.sleep(_WINK_OPEN_DURATION + 0.05)
+        return {"ok": True}
+
+    # ── neck quick controls (manual mode) ────────────────────────────────────
+
+    def _neck_neutral():
+        """Return (yaw_neutral, pitch_neutral, yaw_pin, pitch_pin) from config."""
+        neutral = cfg.get_expression("neutral") or {}
+        cy = float(neutral.get("NeckYaw", 180))
+        cp = float(neutral.get("NeckPitch", 200))
+        p_yaw = cfg.pin_for("NeckYaw")
+        p_pitch = cfg.pin_for("NeckPitch")
+        return cy, cp, p_yaw, p_pitch
+
+    def _neck_limits(servo_name: str):
+        s = cfg.servos.get(servo_name, {})
+        mn = float(s.get("min_angle", 0))
+        mx = float(s.get("max_angle", 360))
+        return min(mn, mx), max(mn, mx)
+
+    @app.post("/api/neck/look-left")
+    async def neck_look_left():
+        """Turn head left (40 % of yaw range from neutral)."""
+        _reject_if_idle()
+        if not serial.is_connected:
+            raise HTTPException(status_code=503, detail="Not connected to ESP32")
+        cy, _cp, p_yaw, _p_pitch = _neck_neutral()
+        if p_yaw is None:
+            raise HTTPException(status_code=404, detail="NeckYaw not configured")
+        mn, _mx = _neck_limits("NeckYaw")
+        target = max(mn, cy - (cy - mn) * 0.4)
+        serial.send_move_multiple([{"servo_id": p_yaw, "angle": target, "duration": 0.5}])
+        positions["NeckYaw"] = target
+        return {"ok": True, "angle": round(target, 1)}
+
+    @app.post("/api/neck/look-right")
+    async def neck_look_right():
+        """Turn head right (40 % of yaw range from neutral)."""
+        _reject_if_idle()
+        if not serial.is_connected:
+            raise HTTPException(status_code=503, detail="Not connected to ESP32")
+        cy, _cp, p_yaw, _p_pitch = _neck_neutral()
+        if p_yaw is None:
+            raise HTTPException(status_code=404, detail="NeckYaw not configured")
+        _mn, mx = _neck_limits("NeckYaw")
+        target = min(mx, cy + (mx - cy) * 0.4)
+        serial.send_move_multiple([{"servo_id": p_yaw, "angle": target, "duration": 0.5}])
+        positions["NeckYaw"] = target
+        return {"ok": True, "angle": round(target, 1)}
+
+    @app.post("/api/neck/look-up")
+    async def neck_look_up():
+        """Tilt head up (40 % of pitch range from neutral)."""
+        _reject_if_idle()
+        if not serial.is_connected:
+            raise HTTPException(status_code=503, detail="Not connected to ESP32")
+        _cy, cp, _p_yaw, p_pitch = _neck_neutral()
+        if p_pitch is None:
+            raise HTTPException(status_code=404, detail="NeckPitch not configured")
+        mn, mx = _neck_limits("NeckPitch")
+        target = max(mn, min(mx, cp + (mx - cp) * 0.4))
+        serial.send_move_multiple([{"servo_id": p_pitch, "angle": target, "duration": 0.5}])
+        positions["NeckPitch"] = target
+        return {"ok": True, "angle": round(target, 1)}
+
+    @app.post("/api/neck/look-down")
+    async def neck_look_down():
+        """Tilt head down (40 % of pitch range from neutral)."""
+        _reject_if_idle()
+        if not serial.is_connected:
+            raise HTTPException(status_code=503, detail="Not connected to ESP32")
+        _cy, cp, _p_yaw, p_pitch = _neck_neutral()
+        if p_pitch is None:
+            raise HTTPException(status_code=404, detail="NeckPitch not configured")
+        mn, mx = _neck_limits("NeckPitch")
+        target = max(mn, min(mx, cp - (cp - mn) * 0.4))
+        serial.send_move_multiple([{"servo_id": p_pitch, "angle": target, "duration": 0.5}])
+        positions["NeckPitch"] = target
+        return {"ok": True, "angle": round(target, 1)}
+
+    @app.post("/api/neck/center")
+    async def neck_center():
+        """Return head to neutral position."""
+        _reject_if_idle()
+        if not serial.is_connected:
+            raise HTTPException(status_code=503, detail="Not connected to ESP32")
+        cy, cp, p_yaw, p_pitch = _neck_neutral()
+        cmds = []
+        if p_yaw is not None:
+            cmds.append({"servo_id": p_yaw, "angle": cy, "duration": 0.5})
+            positions["NeckYaw"] = cy
+        if p_pitch is not None:
+            cmds.append({"servo_id": p_pitch, "angle": cp, "duration": 0.5})
+            positions["NeckPitch"] = cp
+        if cmds:
+            serial.send_move_multiple(cmds)
+        return {"ok": True}
+
+    @app.post("/api/neck/nod")
+    async def neck_nod():
+        """Execute a brief nod (pitch down → return to neutral)."""
+        _reject_if_idle()
+        if not serial.is_connected:
+            raise HTTPException(status_code=503, detail="Not connected to ESP32")
+        _cy, cp, _p_yaw, p_pitch = _neck_neutral()
+        if p_pitch is None:
+            raise HTTPException(status_code=404, detail="NeckPitch not configured")
+        mn, mx = _neck_limits("NeckPitch")
+        nod_angle = max(mn, min(mx, cp - 12.0))
+        serial.send_move_multiple([{"servo_id": p_pitch, "angle": nod_angle, "duration": 0.20}])
+        await asyncio.sleep(0.30)
+        serial.send_move_multiple([{"servo_id": p_pitch, "angle": cp, "duration": 0.25}])
+        await asyncio.sleep(0.30)
+        positions["NeckPitch"] = cp
+        return {"ok": True}
+
+    @app.post("/api/neck/shake")
+    async def neck_shake():
+        """Execute a head shake (yaw left → right → centre)."""
+        _reject_if_idle()
+        if not serial.is_connected:
+            raise HTTPException(status_code=503, detail="Not connected to ESP32")
+        cy, _cp, p_yaw, _p_pitch = _neck_neutral()
+        if p_yaw is None:
+            raise HTTPException(status_code=404, detail="NeckYaw not configured")
+        mn, mx = _neck_limits("NeckYaw")
+        left = max(mn, cy - 15.0)
+        right = min(mx, cy + 15.0)
+        serial.send_move_multiple([{"servo_id": p_yaw, "angle": left, "duration": 0.20}])
+        await asyncio.sleep(0.30)
+        serial.send_move_multiple([{"servo_id": p_yaw, "angle": right, "duration": 0.25}])
+        await asyncio.sleep(0.40)
+        serial.send_move_multiple([{"servo_id": p_yaw, "angle": cy, "duration": 0.20}])
+        await asyncio.sleep(0.25)
+        positions["NeckYaw"] = cy
+        return {"ok": True}
+
+    # ── person tracking toggle ────────────────────────────────────────────────
+
+    @app.get("/api/person-tracking")
+    async def get_person_tracking():
+        try:
+            if PERSON_TRACKING_PATH.exists():
+                data = json.loads(PERSON_TRACKING_PATH.read_text())
+                return {"person_tracking_enabled": bool(data.get("person_tracking_enabled", False))}
+        except Exception:
+            pass
+        return {"person_tracking_enabled": False}
+
+    @app.post("/api/person-tracking")
+    async def set_person_tracking(body: dict):
+        enabled = bool(body.get("person_tracking_enabled", False))
+        PERSON_TRACKING_PATH.parent.mkdir(parents=True, exist_ok=True)
+        PERSON_TRACKING_PATH.write_text(json.dumps({"person_tracking_enabled": enabled}, indent=2))
+        return {"person_tracking_enabled": enabled}
 
     # --- Local idle (manual mode: blink + random gaze; blocks servo/expression control) ----
 

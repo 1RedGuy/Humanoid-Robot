@@ -16,7 +16,7 @@
     "blink_hold_min": 0.06,
     "blink_hold_max": 0.15,
     "blink_open_min": 0.04,
-    "blink_open_max": 0.10,
+    "blink_open_max": 0.1,
     "gaze_extent_fraction": 0.75,
     "gaze_extent_x": 32,
     "gaze_extent_y": 12,
@@ -121,7 +121,7 @@
       "pin": 4,
       "wire_colors": ["white", "red", "red"],
       "min_angle": 110,
-      "max_angle": 360,
+      "max_angle": 240,
       "inverted": false
     },
     "RightJaw": {
@@ -148,7 +148,7 @@
     },
     "NeckYaw": {
       "driver": "gpio",
-      "pin": 26,
+      "pin": 25,
       "wire_colors": ["unk", "unk", "unk"],
       "min_angle": 0,
       "max_angle": 360,
@@ -157,28 +157,31 @@
     },
     "NeckPitch": {
       "driver": "gpio",
-      "pin": 25,
+      "pin": 26,
       "wire_colors": ["unk", "unk", "unk"],
-      "min_angle": 160,
-      "max_angle": 230,
-      "neutral_angle": 200,
-      "inverted": false
+      "min_angle": 0,
+      "max_angle": 360,
+      "neutral_angle": 90,
+      "inverted": false,
+      "min_pulse_us": 500,
+      "max_pulse_us": 2500,
+      "freq": 50
     }
   },
   "lip_sync": {
     "enabled": true,
     "transition_duration": 0.05,
-    "jaw_closed": {"LeftJaw": 110, "RightJaw": 70},
-    "jaw_open": {"LeftJaw": 152, "RightJaw": 28},
+    "jaw_closed": { "LeftJaw": 110, "RightJaw": 70 },
+    "jaw_open": { "LeftJaw": 152, "RightJaw": 28 },
     "upper_lip_neutral": 90,
     "upper_lip_raised": 120,
     "visemes": {
-      "CLOSED": {"jaw_openness": 0.0, "lip_raise": 0.0},
-      "SMALL":  {"jaw_openness": 0.15, "lip_raise": 0.0},
-      "MEDIUM": {"jaw_openness": 0.4, "lip_raise": 0.0},
-      "WIDE":   {"jaw_openness": 0.65, "lip_raise": 0.0},
-      "ROUND":  {"jaw_openness": 0.35, "lip_raise": 0.3},
-      "FV":     {"jaw_openness": 0.1, "lip_raise": 0.7}
+      "CLOSED": { "jaw_openness": 0.0, "lip_raise": 0.0 },
+      "SMALL": { "jaw_openness": 0.15, "lip_raise": 0.0 },
+      "MEDIUM": { "jaw_openness": 0.4, "lip_raise": 0.0 },
+      "WIDE": { "jaw_openness": 0.65, "lip_raise": 0.0 },
+      "ROUND": { "jaw_openness": 0.35, "lip_raise": 0.3 },
+      "FV": { "jaw_openness": 0.1, "lip_raise": 0.7 }
     }
   },
   "expressions": {
@@ -200,7 +203,7 @@
       "LeftJaw": 110,
       "RightJaw": 70,
       "NeckYaw": 180,
-      "NeckPitch": 200
+      "NeckPitch": 90
     },
     "listening": {
       "EyeLidLeftDown": 90,
@@ -211,7 +214,7 @@
       "EyeXAxis": 170,
       "EyebrowInnerRight": 200,
       "NeckYaw": 180,
-      "NeckPitch": 200
+      "NeckPitch": 90
     },
     "thinking": {
       "EyeLidLeftDown": 90,
@@ -221,7 +224,7 @@
       "EyeYAxis": 120,
       "EyeXAxis": 170,
       "NeckYaw": 180,
-      "NeckPitch": 200
+      "NeckPitch": 90
     },
     "speaking": {
       "EyeLidLeftDown": 90,
@@ -231,7 +234,7 @@
       "EyeYAxis": 120,
       "EyeXAxis": 170,
       "NeckYaw": 180,
-      "NeckPitch": 200
+      "NeckPitch": 90
     },
     "eyes_open": {
       "EyeLidLeftDown": 90,

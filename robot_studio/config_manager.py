@@ -14,7 +14,7 @@ SERVO_GROUPS = {
 # Single slider controls multiple servos in sync.
 # direction: +1 means angle = center + offset, -1 means angle = center - offset
 LINKED_CONTROLS = {
-    "Jaw": {
+    "Mouth": {
         "label": "Jaw Open/Close",
         "slider_min": 25,
         "slider_max": 95,
@@ -35,11 +35,11 @@ LINKED_CONTROLS = {
     },
     "NeckPitch": {
         "label": "Neck Tilt (Up/Down)",
-        "slider_min": 160,
-        "slider_max": 230,
-        "slider_default": 200,
+        "slider_min": 50,
+        "slider_max": 130,
+        "slider_default": 90,
         "servos": {
-            "NeckPitch": {"center": 200, "direction": 1},
+            "NeckPitch": {"center": 90, "direction": 1},
         },
     },
 }

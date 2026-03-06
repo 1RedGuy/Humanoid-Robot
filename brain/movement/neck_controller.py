@@ -16,6 +16,7 @@ Layer priorities (for reference):
 import asyncio
 import json
 import random
+import time
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -133,6 +134,57 @@ class NeckController:
             {"NeckYaw": self._neutral_yaw(), "NeckPitch": self._neutral_pitch()},
             duration=duration,
         )
+
+    # ── expressive actions (blocking — call from a thread) ────────────────
+
+    def nod(self, offset: float = 12.0):
+        """Brief downward nod then return to neutral.
+
+        Blocking — intended to be called from a daemon thread so it does not
+        block the asyncio event loop.  Uses the ``neck_action`` layer at
+        priority 8 so it overrides idle drift but not blink/wink (priority 10).
+
+        Parameters
+        ----------
+        offset:
+            Degrees of pitch movement from neutral (default 12°).
+        """
+        _ACTION_LAYER = "neck_action"
+        _ACTION_PRIORITY = 8
+
+        cp = self._neutral_pitch()
+        nod_angle = self._clamp("NeckPitch", cp - offset)
+
+        self._mixer.set_layer(_ACTION_LAYER, _ACTION_PRIORITY, {"NeckPitch": nod_angle}, duration=0.20)
+        time.sleep(0.30)
+        self._mixer.set_layer(_ACTION_LAYER, _ACTION_PRIORITY, {"NeckPitch": cp}, duration=0.25)
+        time.sleep(0.35)
+        self._mixer.release_layer(_ACTION_LAYER, duration=0.10)
+
+    def shake(self, offset: float = 15.0):
+        """Left-right-centre head shake then return to neutral.
+
+        Blocking — intended to be called from a daemon thread.
+
+        Parameters
+        ----------
+        offset:
+            Degrees of yaw movement to each side from neutral (default 15°).
+        """
+        _ACTION_LAYER = "neck_action"
+        _ACTION_PRIORITY = 8
+
+        cy = self._neutral_yaw()
+        left_angle = self._clamp("NeckYaw", cy - offset)
+        right_angle = self._clamp("NeckYaw", cy + offset)
+
+        self._mixer.set_layer(_ACTION_LAYER, _ACTION_PRIORITY, {"NeckYaw": left_angle}, duration=0.20)
+        time.sleep(0.30)
+        self._mixer.set_layer(_ACTION_LAYER, _ACTION_PRIORITY, {"NeckYaw": right_angle}, duration=0.25)
+        time.sleep(0.40)
+        self._mixer.set_layer(_ACTION_LAYER, _ACTION_PRIORITY, {"NeckYaw": cy}, duration=0.20)
+        time.sleep(0.30)
+        self._mixer.release_layer(_ACTION_LAYER, duration=0.10)
 
     # ── idle drift behaviour ─────────────────────────────────────────────
 

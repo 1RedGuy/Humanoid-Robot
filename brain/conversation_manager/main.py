@@ -1,4 +1,6 @@
 import asyncio
+import re
+import threading
 import uuid
 import time
 import json
@@ -6,13 +8,39 @@ import wave
 from pathlib import Path
 from typing import Callable, Optional
 
-from brain.config import PROJECT_ROOT, transcription_language
+from brain.config import PROJECT_ROOT, transcription_language, EMOTION_TO_EXPRESSION, LLM_ACTIONS
 from brain.state import robot_state
 from brain.audio.capture.main import AudioCapture
 from brain.speaking.transcription.main import Transcription
 from brain.speaking.main import Speaking
 from brain.movement.face_controller import FaceController
 from brain.movement.lip_sync import LipSyncController
+
+# ── tag parsing ───────────────────────────────────────────────────────────────
+
+_TAG_PATTERN = re.compile(r'\[(\w+):(\w+)\]')
+
+
+def _parse_tags(raw_text: str) -> tuple[str, str | None, str | None]:
+    """Extract ``[EMOTION:X]`` and ``[ACTION:X]`` tags from the LLM response.
+
+    Returns
+    -------
+    tuple[str, str | None, str | None]
+        ``(clean_text, emotion, action)`` where *clean_text* has all tags
+        stripped and is safe to pass to TTS.
+    """
+    emotion: str | None = None
+    action: str | None = None
+    for m in _TAG_PATTERN.finditer(raw_text):
+        tag_type = m.group(1).upper()
+        tag_value = m.group(2).upper()
+        if tag_type == "EMOTION" and emotion is None:
+            emotion = tag_value
+        elif tag_type == "ACTION" and action is None:
+            action = tag_value
+    clean = _TAG_PATTERN.sub("", raw_text).strip()
+    return clean, emotion, action
 
 
 class ConversationManager:
@@ -21,12 +49,14 @@ class ConversationManager:
         face_controller: Optional[FaceController] = None,
         lip_sync: Optional[LipSyncController] = None,
         on_event: Optional[Callable] = None,
+        neck_controller=None,  # optional NeckController for NOD / SHAKE actions
     ):
         self.audio_capture = AudioCapture()
         self.transcription = Transcription()
         self.speaking = Speaking()
         self.face_controller = face_controller
         self.lip_sync = lip_sync
+        self._neck_controller = neck_controller
         self.conversation_id = None
         self.save_dir = None
         self._emit = on_event or (lambda t, d: None)
@@ -49,6 +79,23 @@ class ConversationManager:
         if self.lip_sync:
             self.lip_sync.stop()
             self._emit("lip_sync.stopped", {})
+
+    def _execute_action(self, action: str):
+        """Run a physical LLM action in a daemon thread (non-blocking)."""
+        def _run():
+            try:
+                if action == "WINK_RIGHT" and self.face_controller:
+                    self.face_controller.wink_right()
+                elif action == "WINK_LEFT" and self.face_controller:
+                    self.face_controller.wink_left()
+                elif action == "NOD" and self._neck_controller:
+                    self._neck_controller.nod()
+                elif action == "SHAKE" and self._neck_controller:
+                    self._neck_controller.shake()
+            except Exception as e:
+                print(f"[ConversationManager] action '{action}' error: {e}")
+
+        threading.Thread(target=_run, daemon=True, name=f"llm_action_{action}").start()
 
     # ── conversation flow (blocking, runs in worker thread) ──
 
@@ -110,20 +157,49 @@ class ConversationManager:
             self._emit("llm.started", {})
             response_text = self.speaking.generate_response(self.conversation_data)
             llm_dur = time.monotonic() - t_llm
-            self._emit("llm.completed", {"text": response_text, "duration_s": round(llm_dur, 2)})
 
+            # ── parse emotion / action tags ──────────────────────────────
+            clean_text, emotion, action = _parse_tags(response_text)
+
+            self._emit("llm.completed", {
+                "text": clean_text,
+                "duration_s": round(llm_dur, 2),
+                "emotion": emotion,
+                "action": action,
+            })
+
+            # Generate TTS from clean text (tags stripped — no tags in audio)
             t_tts = time.monotonic()
             self._emit("tts.started", {})
-            audio_bytes, alignment = self.speaking.generate_audio(response_text)
+            audio_bytes, alignment = self.speaking.generate_audio(clean_text)
             tts_dur = time.monotonic() - t_tts
-            self._emit("tts.completed", {"duration_s": round(tts_dur, 2), "has_alignment": alignment is not None})
+            self._emit("tts.completed", {
+                "duration_s": round(tts_dur, 2),
+                "has_alignment": alignment is not None,
+            })
 
             if assistant_audio_path:
                 with open(assistant_audio_path, 'wb') as f:
                     f.write(audio_bytes)
 
-            self._set_face("speaking")
+            # ── apply emotion expression ─────────────────────────────────
+            # If the LLM specified an emotion, show that expression; otherwise
+            # fall back to the generic "speaking" expression.
+            if emotion:
+                expr_name = EMOTION_TO_EXPRESSION.get(emotion)
+                if expr_name:
+                    self._set_face(expr_name, duration=0.3)
+                else:
+                    self._set_face("speaking")
+            else:
+                self._set_face("speaking")
+
             self._set_activity("speaking")
+
+            # ── trigger physical action in background ────────────────────
+            if action and action in LLM_ACTIONS:
+                self._execute_action(action)
+
             self._start_lip_sync(alignment)
 
             self._emit("audio.playback_start", {})
@@ -132,9 +208,10 @@ class ConversationManager:
 
             self._stop_lip_sync()
 
+            # Store clean text (no tags) in conversation history
             self.conversation_data["messages"].append({
                 "role": "assistant",
-                "content": response_text,
+                "content": clean_text,
                 "timestamp": time.time(),
                 "audio_file": str(assistant_audio_path) if assistant_audio_path else None,
             })

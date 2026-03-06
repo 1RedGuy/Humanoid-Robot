@@ -7,6 +7,7 @@ the conversation worker thread or from async tasks.
 """
 
 import json
+import time
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -76,3 +77,80 @@ class FaceController:
 
     def set_neutral(self, duration: float = 0.4):
         self.set_expression("neutral", duration=duration)
+
+    # ── wink animations ───────────────────────────────────────────────────
+
+    def wink_right(self):
+        """Close and reopen the right eye (wink).
+
+        Blocking — call from a thread or via ``asyncio.to_thread``.
+        Uses the ``wink_right`` expression for the closed position,
+        falling back to right-eye entries from ``eyes_closed``.
+        """
+        # Prefer dedicated wink_right expression; fall back to eyes_closed right eye
+        closed = {
+            k: v
+            for k, v in (
+                self._expressions.get("wink_right")
+                or {
+                    k: v
+                    for k, v in self._expressions.get("eyes_closed", {}).items()
+                    if "Right" in k
+                }
+            ).items()
+            if isinstance(v, (int, float))
+        }
+        if not closed:
+            return
+
+        open_angles = {
+            k: v
+            for k, v in self._expressions.get("eyes_open", {}).items()
+            if "Right" in k and isinstance(v, (int, float))
+        }
+
+        self._mixer.set_layer("wink", 10, closed, duration=0.06)
+        time.sleep(0.06 + 0.14)  # close duration + hold
+
+        if open_angles:
+            self._mixer.enqueue_instant_angles(open_angles)
+            time.sleep(0.08 + 0.05)  # open duration + settle
+
+        self._mixer.release_layer("wink", duration=0.0)
+
+    def wink_left(self):
+        """Close and reopen the left eye (wink).
+
+        Blocking — call from a thread or via ``asyncio.to_thread``.
+        Uses the ``wink_left`` expression for the closed position,
+        falling back to left-eye entries from ``eyes_closed``.
+        """
+        closed = {
+            k: v
+            for k, v in (
+                self._expressions.get("wink_left")
+                or {
+                    k: v
+                    for k, v in self._expressions.get("eyes_closed", {}).items()
+                    if "Left" in k
+                }
+            ).items()
+            if isinstance(v, (int, float))
+        }
+        if not closed:
+            return
+
+        open_angles = {
+            k: v
+            for k, v in self._expressions.get("eyes_open", {}).items()
+            if "Left" in k and isinstance(v, (int, float))
+        }
+
+        self._mixer.set_layer("wink", 10, closed, duration=0.06)
+        time.sleep(0.06 + 0.14)  # close duration + hold
+
+        if open_angles:
+            self._mixer.enqueue_instant_angles(open_angles)
+            time.sleep(0.08 + 0.05)  # open duration + settle
+
+        self._mixer.release_layer("wink", duration=0.0)

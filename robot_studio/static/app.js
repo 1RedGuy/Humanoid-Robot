@@ -60,9 +60,25 @@ const btnRandomLook = document.getElementById("btn-random-look");
 const btnBlinkLeft = document.getElementById("btn-blink-left");
 const btnBlinkRight = document.getElementById("btn-blink-right");
 const btnBlinkBoth = document.getElementById("btn-blink-both");
+const btnWinkRight = document.getElementById("btn-wink-right");
+const btnWinkLeft = document.getElementById("btn-wink-left");
 const btnLipSyncPlay = document.getElementById("btn-lip-sync-play");
 const lipSyncTextEl = document.getElementById("lip-sync-text");
 const lipSyncStatusEl = document.getElementById("lip-sync-status");
+
+/* ── neck buttons ── */
+const btnNeckCenter = document.getElementById("btn-neck-center");
+const btnNeckLeft   = document.getElementById("btn-neck-left");
+const btnNeckRight  = document.getElementById("btn-neck-right");
+const btnNeckUp     = document.getElementById("btn-neck-up");
+const btnNeckDown   = document.getElementById("btn-neck-down");
+const btnNeckNod    = document.getElementById("btn-neck-nod");
+const btnNeckShake  = document.getElementById("btn-neck-shake");
+
+/* ── person tracking (auto mode) ── */
+const btnTrackingOn  = document.getElementById("btn-tracking-on");
+const btnTrackingOff = document.getElementById("btn-tracking-off");
+const trackingStatusEl = document.getElementById("tracking-status");
 
 function setConnected(state, port) {
   connected = state;
@@ -93,7 +109,13 @@ function updateIdleUI(running) {
   if (btnBlinkLeft) btnBlinkLeft.disabled = !connected || locked;
   if (btnBlinkRight) btnBlinkRight.disabled = !connected || locked;
   if (btnBlinkBoth) btnBlinkBoth.disabled = !connected || locked;
+  if (btnWinkRight) btnWinkRight.disabled = !connected || locked;
+  if (btnWinkLeft) btnWinkLeft.disabled = !connected || locked;
   if (btnLipSyncPlay) btnLipSyncPlay.disabled = !connected || locked;
+  // Neck buttons
+  [btnNeckCenter, btnNeckLeft, btnNeckRight, btnNeckUp, btnNeckDown, btnNeckNod, btnNeckShake].forEach((b) => {
+    if (b) b.disabled = !connected || locked;
+  });
   servoGroupsEl?.querySelectorAll("input[type=range]").forEach((el) => {
     el.disabled = locked;
   });
@@ -211,6 +233,42 @@ if (btnBlinkBoth) {
   btnBlinkBoth.addEventListener("click", () =>
     eyesAction("/api/eyes/blink-both", btnBlinkBoth),
   );
+}
+if (btnWinkRight) {
+  btnWinkRight.addEventListener("click", () =>
+    eyesAction("/api/eyes/wink-right", btnWinkRight),
+  );
+}
+if (btnWinkLeft) {
+  btnWinkLeft.addEventListener("click", () =>
+    eyesAction("/api/eyes/wink-left", btnWinkLeft),
+  );
+}
+
+/* ── neck actions ── */
+async function neckAction(endpoint, btn, label) {
+  if (!connected) return;
+  const origText = btn ? btn.textContent : "";
+  if (btn) { btn.disabled = true; if (label) btn.textContent = label; }
+  try {
+    await api("POST", endpoint);
+  } catch (e) {
+    alert("Neck action failed: " + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = origText; }
+  }
+}
+
+if (btnNeckCenter) btnNeckCenter.addEventListener("click", () => neckAction("/api/neck/center", btnNeckCenter));
+if (btnNeckLeft)   btnNeckLeft.addEventListener("click",   () => neckAction("/api/neck/look-left", btnNeckLeft));
+if (btnNeckRight)  btnNeckRight.addEventListener("click",  () => neckAction("/api/neck/look-right", btnNeckRight));
+if (btnNeckUp)     btnNeckUp.addEventListener("click",     () => neckAction("/api/neck/look-up", btnNeckUp));
+if (btnNeckDown)   btnNeckDown.addEventListener("click",   () => neckAction("/api/neck/look-down", btnNeckDown));
+if (btnNeckNod) {
+  btnNeckNod.addEventListener("click", () => neckAction("/api/neck/nod", btnNeckNod, "Nodding…"));
+}
+if (btnNeckShake) {
+  btnNeckShake.addEventListener("click", () => neckAction("/api/neck/shake", btnNeckShake, "Shaking…"));
 }
 
 /* ── lip sync test ── */
@@ -521,6 +579,7 @@ function switchMode(mode) {
   if (mode === "auto") {
     connectWebSocket();
     refreshBrainStatus();
+    api("GET", "/api/person-tracking").then((d) => updateTrackingUI(d.person_tracking_enabled)).catch(() => {});
   }
   if (mode === "history") {
     loadHistorySection();
@@ -543,6 +602,28 @@ modeTabs.forEach((tab) => {
     }
   });
 });
+
+/* ── person tracking toggle (auto mode) ── */
+let personTrackingEnabled = false;
+
+function updateTrackingUI(enabled) {
+  personTrackingEnabled = enabled;
+  if (trackingStatusEl) trackingStatusEl.textContent = enabled ? "On" : "Off";
+  if (btnTrackingOn)  btnTrackingOn.disabled  = enabled;
+  if (btnTrackingOff) btnTrackingOff.disabled = !enabled;
+}
+
+async function setPersonTracking(enabled) {
+  try {
+    const data = await api("POST", "/api/person-tracking", { person_tracking_enabled: enabled });
+    updateTrackingUI(data.person_tracking_enabled);
+  } catch (e) {
+    alert("Person tracking toggle failed: " + e.message);
+  }
+}
+
+if (btnTrackingOn)  btnTrackingOn.addEventListener("click",  () => setPersonTracking(true));
+if (btnTrackingOff) btnTrackingOff.addEventListener("click", () => setPersonTracking(false));
 
 /* ================================================================
    AUTO MODE: Brain Controls
@@ -1198,6 +1279,11 @@ document.getElementById("btn-log-back")?.addEventListener("click", () => {
       if (modeData.mode === "auto") {
         switchMode("auto");
       }
+    } catch (_) {}
+
+    try {
+      const trackingData = await api("GET", "/api/person-tracking");
+      updateTrackingUI(trackingData.person_tracking_enabled);
     } catch (_) {}
 
     try {
