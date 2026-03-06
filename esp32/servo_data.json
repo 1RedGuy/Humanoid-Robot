@@ -184,6 +184,22 @@
       "FV": { "jaw_openness": 0.1, "lip_raise": 0.7 }
     }
   },
+  "person_tracking": {
+    "camera_index": 0,
+    "disable_pitch": true,
+    "gain_yaw": 25.0,
+    "gain_pitch": 12.0,
+    "invert_yaw": true,
+    "invert_pitch": false,
+    "dead_zone": 0.03,
+    "move_duration": 0.05,
+    "max_fps": 20,
+    "no_face_timeout": 3.0,
+    "face_smooth_alpha": 0.35,
+    "fast_smooth_alpha": 0.8,
+    "confidence_max": 8,
+    "confidence_decay": 2
+  },
   "expressions": {
     "neutral": {
       "EyeLidLeftDown": 90,

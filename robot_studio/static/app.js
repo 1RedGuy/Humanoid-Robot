@@ -79,6 +79,50 @@ const btnNeckShake  = document.getElementById("btn-neck-shake");
 const btnTrackingOn  = document.getElementById("btn-tracking-on");
 const btnTrackingOff = document.getElementById("btn-tracking-off");
 const trackingStatusEl = document.getElementById("tracking-status");
+const pitchOverrideWrap = document.getElementById("pitch-override-wrap");
+const pitchAngleSlider = document.getElementById("pitch-angle-slider");
+const pitchAngleVal = document.getElementById("pitch-angle-val");
+const trackingFeedWrap = document.getElementById("tracking-feed-wrap");
+const trackingFeedImg = document.getElementById("tracking-feed-img");
+
+// Safari doesn't support MJPEG in <img>; all other browsers do.
+const _isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
+let _trackingFeedActive = false;
+let _trackingFeedTimer = null;
+
+// Safari fallback: JS polling via snapshot endpoint
+function _pollNextFrame() {
+  if (!_trackingFeedActive || !trackingFeedImg) return;
+  const offscreen = new Image();
+  offscreen.onload = function () {
+    if (_trackingFeedActive && trackingFeedImg) trackingFeedImg.src = this.src;
+    _trackingFeedTimer = setTimeout(_pollNextFrame, 100);
+  };
+  offscreen.onerror = function () {
+    _trackingFeedTimer = setTimeout(_pollNextFrame, 500);
+  };
+  offscreen.src = "/api/person-tracking/camera-snapshot?" + Date.now();
+}
+
+function _startTrackingFeed() {
+  if (_trackingFeedActive) return;
+  _trackingFeedActive = true;
+  if (!trackingFeedImg) return;
+  if (_isSafari) {
+    // Safari: JS polling
+    _pollNextFrame();
+  } else {
+    // Chrome / Firefox: native MJPEG stream — browser handles it automatically
+    trackingFeedImg.src = "/api/person-tracking/camera-feed";
+  }
+}
+
+function _stopTrackingFeed() {
+  _trackingFeedActive = false;
+  if (_trackingFeedTimer) { clearTimeout(_trackingFeedTimer); _trackingFeedTimer = null; }
+  if (trackingFeedImg) trackingFeedImg.src = "";
+}
 
 function setConnected(state, port) {
   connected = state;
@@ -579,7 +623,10 @@ function switchMode(mode) {
   if (mode === "auto") {
     connectWebSocket();
     refreshBrainStatus();
-    api("GET", "/api/person-tracking").then((d) => updateTrackingUI(d.person_tracking_enabled)).catch(() => {});
+    api("GET", "/api/person-tracking").then((d) => updateTrackingUI(d)).catch(() => {});
+    _startTrackingFeed();
+  } else {
+    _stopTrackingFeed();
   }
   if (mode === "history") {
     loadHistorySection();
@@ -606,17 +653,38 @@ modeTabs.forEach((tab) => {
 /* ── person tracking toggle (auto mode) ── */
 let personTrackingEnabled = false;
 
-function updateTrackingUI(enabled) {
+function updateTrackingUI(data) {
+  // Accept either a full status object or a plain boolean (backwards compat)
+  const enabled = typeof data === "boolean" ? data : Boolean(data?.person_tracking_enabled);
+  const pitchDisabled = typeof data === "object" ? Boolean(data?.pitch_disabled) : false;
+  const pitchAngle = typeof data === "object" ? (data?.pitch_angle ?? 90) : 90;
+  const pitchMin = typeof data === "object" ? (data?.pitch_min ?? 0) : 0;
+  const pitchMax = typeof data === "object" ? (data?.pitch_max ?? 360) : 360;
+
   personTrackingEnabled = enabled;
   if (trackingStatusEl) trackingStatusEl.textContent = enabled ? "On" : "Off";
   if (btnTrackingOn)  btnTrackingOn.disabled  = enabled;
   if (btnTrackingOff) btnTrackingOff.disabled = !enabled;
+
+  // Pitch manual override — visible only when tracking is on AND pitch is disabled
+  if (pitchOverrideWrap) {
+    pitchOverrideWrap.style.display = (enabled && pitchDisabled) ? "" : "none";
+    if (pitchAngleSlider) {
+      pitchAngleSlider.min = pitchMin;
+      pitchAngleSlider.max = pitchMax;
+      pitchAngleSlider.value = Math.round(pitchAngle);
+    }
+    if (pitchAngleVal) pitchAngleVal.textContent = Math.round(pitchAngle) + "°";
+  }
+
+  // Camera feed — always show, poll continuously
+  _startTrackingFeed();
 }
 
 async function setPersonTracking(enabled) {
   try {
     const data = await api("POST", "/api/person-tracking", { person_tracking_enabled: enabled });
-    updateTrackingUI(data.person_tracking_enabled);
+    updateTrackingUI(data);
   } catch (e) {
     alert("Person tracking toggle failed: " + e.message);
   }
@@ -624,6 +692,23 @@ async function setPersonTracking(enabled) {
 
 if (btnTrackingOn)  btnTrackingOn.addEventListener("click",  () => setPersonTracking(true));
 if (btnTrackingOff) btnTrackingOff.addEventListener("click", () => setPersonTracking(false));
+
+/* ── pitch angle override slider ── */
+const _sendPitchAngle = debounce(async (angle) => {
+  try {
+    await api("POST", "/api/person-tracking/pitch-angle", { angle });
+  } catch (e) {
+    console.error("Pitch angle update failed:", e.message);
+  }
+}, 120);
+
+if (pitchAngleSlider) {
+  pitchAngleSlider.addEventListener("input", () => {
+    const angle = Number(pitchAngleSlider.value);
+    if (pitchAngleVal) pitchAngleVal.textContent = Math.round(angle) + "°";
+    _sendPitchAngle(angle);
+  });
+}
 
 /* ================================================================
    AUTO MODE: Brain Controls
@@ -1281,9 +1366,11 @@ document.getElementById("btn-log-back")?.addEventListener("click", () => {
       }
     } catch (_) {}
 
+    _startTrackingFeed();
+
     try {
       const trackingData = await api("GET", "/api/person-tracking");
-      updateTrackingUI(trackingData.person_tracking_enabled);
+      updateTrackingUI(trackingData);
     } catch (_) {}
 
     try {

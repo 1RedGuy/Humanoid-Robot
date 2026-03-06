@@ -52,6 +52,7 @@ class BrainRunner:
         self._log_subscriber = None
         self._log_file = None
         self.running = False
+        self.brain = None
 
     def _open_session_log(self):
         _LOGS_DIR.mkdir(parents=True, exist_ok=True)
@@ -102,6 +103,7 @@ class BrainRunner:
         event_bus.publish("brain.started", {})
 
     async def _run_brain(self, brain, event_bus: EventBus):
+        self.brain = brain
         try:
             await brain.run()
         except asyncio.CancelledError:
@@ -110,6 +112,7 @@ class BrainRunner:
             event_bus.publish("brain.error", {"error": str(e), "traceback": traceback.format_exc()})
             print(f"[BrainRunner] Brain crashed: {e}")
         finally:
+            self.brain = None
             self.running = False
 
     async def stop(self):

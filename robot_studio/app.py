@@ -9,7 +9,7 @@ from typing import Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
 from .serial_client import SerialClient
@@ -701,22 +701,219 @@ def create_app(
 
     # ── person tracking toggle ────────────────────────────────────────────────
 
-    @app.get("/api/person-tracking")
-    async def get_person_tracking():
+    def _tracking_status() -> dict:
+        """Build the full person-tracking status response."""
+        enabled = False
+        pitch_angle = None
         try:
             if PERSON_TRACKING_PATH.exists():
                 data = json.loads(PERSON_TRACKING_PATH.read_text())
-                return {"person_tracking_enabled": bool(data.get("person_tracking_enabled", False))}
+                enabled = bool(data.get("person_tracking_enabled", False))
+                pitch_angle = data.get("pitch_angle")
         except Exception:
             pass
-        return {"person_tracking_enabled": False}
+        tracking_cfg = cfg._raw.get("person_tracking", {})
+        pitch_disabled = bool(tracking_cfg.get("disable_pitch", False))
+        servo_pitch = cfg.servos.get("NeckPitch", {})
+        pitch_min = float(servo_pitch.get("min_angle", 0))
+        pitch_max = float(servo_pitch.get("max_angle", 360))
+        pitch_neutral = float(servo_pitch.get("neutral_angle", 90))
+        if pitch_angle is None:
+            pitch_angle = pitch_neutral
+        return {
+            "person_tracking_enabled": enabled,
+            "pitch_disabled": pitch_disabled,
+            "pitch_angle": pitch_angle,
+            "pitch_min": pitch_min,
+            "pitch_max": pitch_max,
+            "pitch_neutral": pitch_neutral,
+        }
+
+    @app.get("/api/person-tracking")
+    async def get_person_tracking():
+        return _tracking_status()
 
     @app.post("/api/person-tracking")
     async def set_person_tracking(body: dict):
         enabled = bool(body.get("person_tracking_enabled", False))
+        current = {}
+        try:
+            if PERSON_TRACKING_PATH.exists():
+                current = json.loads(PERSON_TRACKING_PATH.read_text())
+        except Exception:
+            pass
+        current["person_tracking_enabled"] = enabled
         PERSON_TRACKING_PATH.parent.mkdir(parents=True, exist_ok=True)
-        PERSON_TRACKING_PATH.write_text(json.dumps({"person_tracking_enabled": enabled}, indent=2))
-        return {"person_tracking_enabled": enabled}
+        PERSON_TRACKING_PATH.write_text(json.dumps(current, indent=2))
+        return _tracking_status()
+
+    class PitchAngleBody(BaseModel):
+        angle: float
+
+    @app.post("/api/person-tracking/pitch-angle")
+    async def set_pitch_angle(body: PitchAngleBody):
+        """Set manual pitch angle when pitch tracking is disabled."""
+        current = {}
+        try:
+            if PERSON_TRACKING_PATH.exists():
+                current = json.loads(PERSON_TRACKING_PATH.read_text())
+        except Exception:
+            pass
+        current["pitch_angle"] = body.angle
+        PERSON_TRACKING_PATH.parent.mkdir(parents=True, exist_ok=True)
+        PERSON_TRACKING_PATH.write_text(json.dumps(current, indent=2))
+        return {"ok": True, "pitch_angle": body.angle}
+
+    # Try to load the best available face detector once at startup for the Studio feed overlay
+    _studio_insight = None
+    _studio_mp = None
+    _studio_detector_name = "Haar cascade"
+    try:
+        from insightface.app import FaceAnalysis as _StudioInsightFace
+        _studio_insight = _StudioInsightFace(name="buffalo_l", allowed_modules=["detection"])
+        _studio_insight.prepare(ctx_id=0, det_size=(640, 640))
+        _studio_detector_name = "InsightFace SCRFD_10G"
+        print(f"[Studio] Face detector: {_studio_detector_name}")
+    except Exception as e:
+        print(f"[Studio] InsightFace unavailable ({e}), trying MediaPipe")
+        try:
+            import mediapipe as _mp_studio
+            _studio_mp = _mp_studio.solutions.face_detection.FaceDetection(
+                model_selection=1, min_detection_confidence=0.5
+            )
+            _studio_detector_name = "MediaPipe BlazeFace"
+            print(f"[Studio] Face detector: {_studio_detector_name}")
+        except Exception as e2:
+            print(f"[Studio] MediaPipe unavailable ({e2}), using Haar cascade")
+
+    def _annotate_frame(cv2, np, frame, brain_running, tracker_exists):
+        """Build an annotated JPEG bytes from a raw frame (or placeholder if None)."""
+        if frame is None:
+            img = np.zeros((240, 320, 3), dtype=np.uint8)
+            if not brain_running:
+                msg = "Start brain to see camera feed"
+            elif not tracker_exists:
+                msg = "Tracker not initialised (no servo)"
+            else:
+                msg = "Camera not accessible (check index/perms)"
+            cv2.putText(img, msg, (10, 115), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (120, 120, 120), 1)
+            _, j = cv2.imencode(".jpg", img)
+            return j.tobytes()
+
+        display = frame.copy()
+        h, w = display.shape[:2]
+
+        # Detect faces: InsightFace SCRFD → MediaPipe → Haar
+        faces = []
+        if _studio_insight is not None:
+            for face in _studio_insight.get(display):
+                x1, y1, x2, y2 = face.bbox.astype(int)
+                faces.append((x1, y1, x2 - x1, y2 - y1))
+        elif _studio_mp is not None:
+            rgb = cv2.cvtColor(display, cv2.COLOR_BGR2RGB)
+            results = _studio_mp.process(rgb)
+            if results.detections:
+                for det in results.detections:
+                    bb = det.location_data.relative_bounding_box
+                    fx = int(max(0.0, bb.xmin) * w)
+                    fy = int(max(0.0, bb.ymin) * h)
+                    fw = int(bb.width * w)
+                    fh = int(bb.height * h)
+                    faces.append((fx, fy, fw, fh))
+        else:
+            gray = cv2.cvtColor(display, cv2.COLOR_BGR2GRAY)
+            raw = cv2.CascadeClassifier(
+                cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+            ).detectMultiScale(gray, 1.1, 5, minSize=(60, 60))
+            if len(raw) > 0:
+                faces = list(raw)
+
+        cx, cy = w // 2, h // 2
+        cv2.line(display, (cx - 20, cy), (cx + 20, cy), (0, 0, 200), 1)
+        cv2.line(display, (cx, cy - 20), (cx, cy + 20), (0, 0, 200), 1)
+        for (x, y, fw, fh) in faces:
+            cv2.rectangle(display, (x, y), (x + fw, y + fh), (0, 200, 0), 2)
+            fcx, fcy = x + fw // 2, y + fh // 2
+            cv2.circle(display, (fcx, fcy), 5, (200, 100, 0), -1)
+            cv2.line(display, (cx, cy), (fcx, fcy), (0, 180, 255), 1)
+        label = f"Faces: {len(faces)}" if faces else "No face detected"
+        color = (0, 220, 0) if faces else (0, 80, 220)
+        cv2.putText(display, label, (5, 18), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
+        cv2.putText(display, _studio_detector_name, (5, h - 6), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (160, 160, 160), 1)
+        _, j = cv2.imencode(".jpg", display, [cv2.IMWRITE_JPEG_QUALITY, 70])
+        return j.tobytes()
+
+    @app.get("/api/person-tracking/camera-feed")
+    async def person_tracking_camera_feed():
+        """MJPEG stream — works natively in Chrome/Firefox <img> tags at ~12fps."""
+        try:
+            import cv2 as _cv2
+            import numpy as _np
+        except ImportError:
+            raise HTTPException(status_code=503, detail="OpenCV not available")
+
+        async def generate():
+            while True:
+                brain_running = bool(brain_runner.brain)
+                tracker_exists = bool(brain_runner.brain and brain_runner.brain.person_tracker)
+                frame = brain_runner.brain.person_tracker.get_latest_frame() if tracker_exists else None
+                jpeg = await asyncio.to_thread(
+                    _annotate_frame, _cv2, _np, frame, brain_running, tracker_exists
+                )
+                yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + jpeg + b"\r\n"
+                await asyncio.sleep(0.08)
+
+        return StreamingResponse(
+            generate(),
+            media_type="multipart/x-mixed-replace; boundary=frame",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
+    @app.get("/api/person-tracking/camera-snapshot")
+    async def person_tracking_snapshot():
+        """Single JPEG — used as Safari fallback since Safari doesn't support MJPEG in <img>."""
+        try:
+            import cv2 as _cv2
+            import numpy as _np
+        except ImportError:
+            raise HTTPException(status_code=503, detail="OpenCV not available")
+
+        brain_running = bool(brain_runner.brain)
+        tracker_exists = bool(brain_runner.brain and brain_runner.brain.person_tracker)
+        frame = brain_runner.brain.person_tracker.get_latest_frame() if tracker_exists else None
+        jpeg_bytes = await asyncio.to_thread(
+            _annotate_frame, _cv2, _np, frame, brain_running, tracker_exists
+        )
+        return Response(
+            content=jpeg_bytes,
+            media_type="image/jpeg",
+            headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"},
+        )
+
+    @app.get("/api/person-tracking/detector-info")
+    async def person_tracking_detector_info():
+        """Returns which face detector is active in Robot Studio and in the brain tracker."""
+        brain_detector = None
+        if brain_runner.brain and brain_runner.brain.person_tracker:
+            pt = brain_runner.brain.person_tracker
+            if getattr(pt, "_insight_detector", None) is not None:
+                brain_detector = "InsightFace SCRFD_10G"
+            elif getattr(pt, "_mp_detector", None) is not None:
+                brain_detector = "MediaPipe BlazeFace"
+            else:
+                brain_detector = "Haar cascade"
+        ort_providers = []
+        try:
+            import onnxruntime as _ort
+            ort_providers = _ort.get_available_providers()
+        except Exception:
+            pass
+        return {
+            "studio_detector": _studio_detector_name,
+            "brain_detector": brain_detector,
+            "onnxruntime_providers": ort_providers,
+            "coreml_active": "CoreMLExecutionProvider" in ort_providers,
+        }
 
     # --- Local idle (manual mode: blink + random gaze; blocks servo/expression control) ----
 
